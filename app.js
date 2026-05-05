@@ -760,13 +760,14 @@ function renderTable() {
   const isAll  = platform === 'all';
 
   const heads = isAll  ? ['Campaign','Platform','Spend','Revenue','ROAS','Conversions','Status']
-              : isFB   ? ['Campaign','Spend','Result','Cost / Result','Revenue','ROAS','Status']
+              : isFB   ? ['Campaign','Spend','Result','Cost / Result','Status']
               :          ['Campaign','Spend','Revenue','ROAS','Conversions','Status'];
 
   head.innerHTML = '<tr>' + heads.map(h => `<th>${h}</th>`).join('') + '</tr>';
   body.innerHTML = rows.map(c => {
-    const roas       = c.spend > 0 ? (c.revenue / c.spend) : 0;
-    const roasCls    = roasClass(roas);
+    const roas       = c.spend > 0 && c.revenue > 0 ? (c.revenue / c.spend) : null;
+    const roasCls    = roas !== null ? roasClass(roas) : '';
+    const roasVal    = roas !== null ? roas.toFixed(2) + 'x' : '&mdash;';
     const costPerRes = c.conv  > 0 ? fmt$(c.spend / c.conv) : '&mdash;';
     const pBadge     = `<span class="platform-badge badge-${c.platform}">${c.platform === 'fb' ? 'FB' : c.platform === 'gads' ? 'GAdS' : 'GA'}</span>`;
     const stBadge    = `<span class="status-badge status-${c.status}"><span class="status-dot-sm"></span>${c.status}</span>`;
@@ -776,8 +777,6 @@ function renderTable() {
       <td>${fmt$(c.spend)}</td>
       <td><div class="result-cell"><span class="result-pill">${fmtN(c.conv)}</span><span class="result-type">${c.resultLabel || 'Results'}</span></div></td>
       <td>${costPerRes}</td>
-      <td>${fmt$(c.revenue)}</td>
-      <td class="${roasCls}">${roas.toFixed(2)}x</td>
       <td>${stBadge}</td>`
     : `
       <td>${c.name}</td>
