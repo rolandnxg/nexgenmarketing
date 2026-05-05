@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarketIQ &mdash; Analytics Portal</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <script src="config.js" defer></script>
+  <script src="fb-api.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">M</div>
+        <span class="brand-name">MarketIQ</span>
+      </div>
+
+      <div class="nav-label">Platforms</div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-platform="all">
+          <span class="nav-pip pip-all"></span>
+          Overview
+        </button>
+        <button class="nav-item" data-platform="ga">
+          <span class="nav-pip pip-ga"></span>
+          Google Analytics
+        </button>
+        <button class="nav-item" data-platform="fb">
+          <span class="nav-pip pip-fb"></span>
+          Facebook Ads
+        </button>
+        <button class="nav-item" data-platform="gads">
+          <span class="nav-pip pip-gads"></span>
+          Google Ads
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="live-dot"></span>
+        Mock data &mdash; ready for live APIs
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Overview</h1>
+          <p id="page-subtitle">All platforms combined</p>
+        </div>
+        <div class="date-controls">
+          <div class="date-picker">
+            <button class="date-btn" data-days="7">7D</button>
+            <button class="date-btn active" data-days="30">30D</button>
+            <button class="date-btn" data-days="90">90D</button>
+            <button class="date-btn" id="date-custom-btn">Custom</button>
+          </div>
+          <div class="date-custom-panel hidden" id="date-custom-panel">
+            <div class="dcp-group">
+              <label class="dcp-label" for="date-from">From</label>
+              <input type="date" id="date-from" class="dcp-input">
+            </div>
+            <span class="dcp-arrow">&#8594;</span>
+            <div class="dcp-group">
+              <label class="dcp-label" for="date-to">To</label>
+              <input type="date" id="date-to" class="dcp-input">
+            </div>
+            <button id="date-apply" class="dcp-apply">Apply</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="content">
+
+        <!-- Loading & error states -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+          <div class="loading-spinner"></div>
+          <span>Fetching Facebook Ads data&hellip;</span>
+        </div>
+        <div id="error-banner" class="error-banner hidden">
+          <span id="error-msg"></span>
+          <button class="error-close" id="error-close">&times;</button>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid" id="kpi-grid"></div>
+
+        <!-- Charts Row 1 -->
+        <div class="charts-top">
+          <div class="chart-card chart-main">
+            <div class="chart-header">
+              <h3 id="chart-main-title">Revenue &amp; Ad Spend</h3>
+              <span id="chart-main-sub" class="chart-sub">Daily trend</span>
+            </div>
+            <div class="chart-body">
+              <canvas id="chart-main"></canvas>
+            </div>
+          </div>
+          <div class="chart-card chart-donut">
+            <div class="chart-header">
+              <h3 id="chart-donut-title">Budget Split</h3>
+            </div>
+            <div class="chart-body chart-body-donut">
+              <canvas id="chart-donut"></canvas>
+            </div>
+            <div id="donut-legend" class="donut-legend"></div>
+          </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="charts-bottom">
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3 id="chart-bar-title">Traffic by Source</h3>
+            </div>
+            <div class="chart-body">
+              <canvas id="chart-bar"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3 id="chart-line-title">Conversions</h3>
+            </div>
+            <div class="chart-body">
+              <canvas id="chart-line"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-card">
+          <div class="table-header">
+            <h3 id="table-title">Campaign Performance</h3>
+            <span id="table-badge" class="table-badge"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead id="table-head"></thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>
