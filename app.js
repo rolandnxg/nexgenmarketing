@@ -85,13 +85,15 @@ const topPages = [
 ];
 
 /* ── State ──────────────────────────────────────────────── */
-let platform       = 'all';
-let days           = 30;
-let dateFrom       = null;
-let dateTo         = null;
-let charts         = {};
-let fbApiDaily     = [];
-let fbApiCampaigns = [];
+let platform        = 'all';
+let days            = 30;
+let dateFrom        = null;
+let dateTo          = null;
+let charts          = {};
+let fbApiDaily      = [];
+let fbApiCampaigns  = [];
+let gadsApiDaily    = [];
+let gadsApiCampaigns = [];
 
 /* ── Helpers ────────────────────────────────────────────── */
 const sum  = (arr, k) => arr.reduce((a, d) => a + d[k], 0);
@@ -196,18 +198,20 @@ function buildKPIs(s) {
     ];
   }
   if (platform === 'gads') {
-    const impr  = sum(s, 'gads_impressions');
-    const clicks= sum(s, 'gads_clicks');
-    const spend = sum(s, 'gads_spend');
-    const conv  = sum(s, 'gads_conversions');
-    const rev   = sum(s, 'revenue') * 0.55;
+    const impr   = sum(s, 'gads_impressions');
+    const clicks = sum(s, 'gads_clicks');
+    const spend  = sum(s, 'gads_spend');
+    const conv   = sum(s, 'gads_conversions');
+    const isReal = gadsApiDaily.length > 0;
+    const rev    = isReal ? sum(s, 'revenue') : sum(s, 'revenue') * 0.55;
+    const roas   = spend > 0 && rev > 0 ? (rev / spend).toFixed(2) + 'x' : '—';
     return [
-      { label: 'Impressions',  value: fmtN(impr),               pct: randChange(5, 25), up: true  },
-      { label: 'Clicks',       value: fmtN(clicks),             pct: randChange(4, 28), up: true  },
-      { label: 'Ad Spend',     value: fmt$(spend),              pct: randChange(2, 15), up: false },
-      { label: 'Conversions',  value: fmtN(conv),               pct: randChange(5, 22), up: true  },
-      { label: 'Avg CPC',      value: fmt$(spend / clicks),     pct: randChange(1, 12), up: false },
-      { label: 'ROAS',         value: (rev / spend).toFixed(2) + 'x', pct: randChange(2, 18), up: true  },
+      { label: 'Impressions',  value: fmtN(impr),            pct: randChange(5, 25), up: true  },
+      { label: 'Clicks',       value: fmtN(clicks),          pct: randChange(4, 28), up: true  },
+      { label: 'Ad Spend',     value: fmt$(spend),           pct: randChange(2, 15), up: false },
+      { label: 'Conversions',  value: fmtN(conv),            pct: randChange(5, 22), up: true  },
+      { label: 'Avg CPC',      value: clicks > 0 ? fmt$(spend / clicks) : '—', pct: randChange(1, 12), up: false },
+      { label: 'ROAS',         value: roas,                  pct: randChange(2, 18), up: true  },
     ];
   }
 }
@@ -589,10 +593,15 @@ function getChartConfigs(s) {
   if (platform === 'gads') {
     const spend = s.map(d => d.gads_spend);
     const conv  = s.map(d => d.gads_conversions);
-    const roas  = s.map((d, i) => parseFloat(((d.revenue * 0.55) / d.gads_spend).toFixed(2)));
+    const isReal = gadsApiDaily.length > 0;
+    const roas  = s.map(d => d.gads_spend > 0
+      ? parseFloat(((isReal ? d.revenue : d.revenue * 0.55) / d.gads_spend).toFixed(2))
+      : 0
+    );
     const clicks= s.map(d => d.gads_clicks);
-    const gadsCampaigns = campaigns.filter(c => c.platform === 'gads');
-    const colors = ['#FBBC05','#f6ad55','#fbd38d','#fef3c7'];
+    const gadsCampaigns = gadsApiCampaigns.length > 0 ? gadsApiCampaigns : campaigns.filter(c => c.platform === 'gads');
+    const baseColors = ['#FBBC05','#f6ad55','#fbd38d','#fef3c7','#facc15','#fde68a'];
+    const colors = gadsCampaigns.map((_, i) => baseColors[i % baseColors.length]);
 
     return {
       mainTitle:  'Spend & Conversions',
@@ -640,7 +649,7 @@ function getChartConfigs(s) {
         type: 'doughnut',
         data: {
           labels: gadsCampaigns.map(c => c.name),
-          datasets: [{ data: gadsCampaigns.map(c => c.spend), backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }],
+          datasets: [{ data: gadsCampaigns.map(c => Math.round(c.spend)), backgroundColor: colors, borderWidth: 0, hoverOffset: 4 }],
         },
         options: {
           responsive: true, maintainAspectRatio: false, cutout: '72%',
@@ -753,7 +762,8 @@ function renderTable() {
     return;
   }
 
-  const rows = (platform === 'fb' && fbApiCampaigns.length > 0 ? fbApiCampaigns
+  const rows = (platform === 'fb'   && fbApiCampaigns.length   > 0 ? fbApiCampaigns
+             : platform === 'gads' && gadsApiCampaigns.length > 0 ? gadsApiCampaigns
              : platform === 'all' ? campaigns
              : campaigns.filter(c => c.platform === platform))
              .filter(c => platform !== 'fb' || c.status === 'active');
@@ -816,10 +826,11 @@ function renderHeader() {
 async function update() {
   hideError();
 
+  const dateOpts = { days, dateFrom, dateTo };
+
   if (platform === 'fb') {
+    document.getElementById('loading-msg').textContent = 'Fetching Facebook Ads data…';
     showLoading(true);
-    const dateOpts = { days, dateFrom, dateTo };
-    console.log('[FB Update] dateOpts:', JSON.stringify(dateOpts));
     try {
       [fbApiDaily, fbApiCampaigns] = await Promise.all([
         fetchFBDailyInsights(dateOpts),
@@ -833,7 +844,25 @@ async function update() {
     showLoading(false);
   }
 
-  const s = platform === 'fb' ? fbApiDaily : slice();
+  if (platform === 'gads') {
+    document.getElementById('loading-msg').textContent = 'Fetching Google Ads data…';
+    showLoading(true);
+    try {
+      [gadsApiDaily, gadsApiCampaigns] = await Promise.all([
+        fetchGAdsDailyInsights(dateOpts),
+        fetchGAdsCampaigns(dateOpts),
+      ]);
+    } catch (err) {
+      showLoading(false);
+      showError('Google Ads: ' + err.message);
+      return;
+    }
+    showLoading(false);
+  }
+
+  const s = platform === 'fb'   ? fbApiDaily
+          : platform === 'gads' && gadsApiDaily.length > 0 ? gadsApiDaily
+          : slice();
   renderHeader();
   renderKPIs(s);
   renderCharts(s);

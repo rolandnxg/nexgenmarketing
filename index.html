@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <script src="config.js" defer></script>
   <script src="fb-api.js" defer></script>
+  <script src="gads-api.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -42,7 +43,7 @@
 
       <div class="sidebar-footer">
         <span class="live-dot"></span>
-        Mock data &mdash; ready for live APIs
+        Live: FB &amp; Google Ads &nbsp;|&nbsp; GA: Mock
       </div>
     </aside>
 
@@ -80,7 +81,7 @@
         <!-- Loading & error states -->
         <div id="loading-overlay" class="loading-overlay hidden">
           <div class="loading-spinner"></div>
-          <span>Fetching Facebook Ads data&hellip;</span>
+          <span id="loading-msg">Fetching data&hellip;</span>
         </div>
         <div id="error-banner" class="error-banner hidden">
           <span id="error-msg"></span>
