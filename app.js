@@ -916,4 +916,8 @@ applyBtn.addEventListener('click', () => {
 document.getElementById('error-close').addEventListener('click', hideError);
 
 /* ── Init ───────────────────────────────────────────────── */
-update();
+try {
+  update();
+} catch (e) {
+  showError(e.message);
+}

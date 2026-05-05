@@ -1,3 +1,9 @@
+if (typeof FB_CONFIG === 'undefined') {
+  throw new Error(
+    'config.js is missing. Copy config.example.js → config.js and add your Facebook credentials.'
+  );
+}
+
 const FB_BASE = 'https://graph.facebook.com/v19.0';
 
 /* Maps Facebook campaign objective → { action type, display label } */
