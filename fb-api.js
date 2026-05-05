@@ -4,7 +4,6 @@ if (typeof FB_CONFIG === 'undefined') {
   );
 }
 
-const TZ      = 'Australia/Sydney';
 const FB_BASE = 'https://graph.facebook.com/v19.0';
 
 /* Maps Facebook campaign objective → { action type, display label } */
