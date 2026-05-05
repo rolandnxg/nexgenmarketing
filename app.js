@@ -760,7 +760,7 @@ function renderTable() {
   const isAll  = platform === 'all';
 
   const heads = isAll  ? ['Campaign','Platform','Spend','Revenue','ROAS','Conversions','Status']
-              : isFB   ? ['Campaign','Spend','Result','Cost / Result','Status']
+              : isFB   ? ['Campaign','Spend','Impressions','Reach','Result','Cost / Result','Status']
               :          ['Campaign','Spend','Revenue','ROAS','Conversions','Status'];
 
   head.innerHTML = '<tr>' + heads.map(h => `<th>${h}</th>`).join('') + '</tr>';
@@ -775,6 +775,8 @@ function renderTable() {
     const base = isFB ? `
       <td>${c.name}</td>
       <td>${fmt$(c.spend)}</td>
+      <td>${fmtN(c.impressions ?? 0)}</td>
+      <td>${fmtN(c.reach       ?? 0)}</td>
       <td><div class="result-cell"><span class="result-pill">${fmtN(c.conv)}</span><span class="result-type">${c.resultLabel || 'Results'}</span></div></td>
       <td>${costPerRes}</td>
       <td>${stBadge}</td>`

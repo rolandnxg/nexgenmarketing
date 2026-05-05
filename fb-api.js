@@ -160,6 +160,8 @@ async function fetchFBCampaignInsights(dateOpts) {
       platform:    'fb',
       spend:       parseFloat(c.spend || 0),
       revenue:     getActionTotal(c.action_values),
+      impressions: parseInt(c.impressions || 0),
+      reach:       parseInt(c.reach       || 0),
       conv,
       resultLabel: meta.label,
       status:      meta.status === 'ACTIVE' ? 'active' : 'paused',
