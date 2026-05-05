@@ -11,26 +11,31 @@ function makePRNG(seed) {
 }
 const rand = makePRNG(0xDEADBEEF);
 
+/* ── Timezone ────────────────────────────────────────────── */
+const TZ = 'Australia/Sydney';
+
+const toDateStr = d =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d);
+
+const toLabel = d =>
+  new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric' }).format(d);
+
 /* ── Generate 90 days of mock data ──────────────────────── */
 const TOTAL = 90;
 
-function toDateStr(d) {
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, '0');
-  const dy = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dy}`;
-}
+// Anchor "today" to Sydney date so day boundaries are correct
+const _todayStr = toDateStr(new Date());
+const [_ty, _tm, _td] = _todayStr.split('-').map(Number);
 
 const daily = Array.from({ length: TOTAL }, (_, i) => {
-  const d = new Date();
-  d.setDate(d.getDate() - (TOTAL - 1 - i));
+  const d = new Date(_ty, _tm - 1, _td - (TOTAL - 1 - i), 12, 0, 0);
   const fbConv    = rand(15, 70);
   const gadsConv  = rand(10, 50);
   const fbSpend   = rand(180, 650);
   const gadsSpend = rand(120, 480);
   return {
     dateStr:          toDateStr(d),
-    label:            d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    label:            toLabel(d),
     ga_sessions:      rand(800, 2800),
     ga_users:         rand(600, 2000),
     ga_pageviews:     rand(2000, 8000),
@@ -814,6 +819,7 @@ async function update() {
   if (platform === 'fb') {
     showLoading(true);
     const dateOpts = { days, dateFrom, dateTo };
+    console.log('[FB Update] dateOpts:', JSON.stringify(dateOpts));
     try {
       [fbApiDaily, fbApiCampaigns] = await Promise.all([
         fetchFBDailyInsights(dateOpts),
@@ -864,10 +870,11 @@ const inputFrom   = document.getElementById('date-from');
 const inputTo     = document.getElementById('date-to');
 const applyBtn    = document.getElementById('date-apply');
 
-inputFrom.min   = daily[0].dateStr;
+const today2yr  = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return toDateStr(d); })();
+inputFrom.min   = today2yr;
 inputFrom.max   = daily[TOTAL - 1].dateStr;
 inputFrom.value = daily[TOTAL - 30].dateStr;
-inputTo.min     = daily[0].dateStr;
+inputTo.min     = today2yr;
 inputTo.max     = daily[TOTAL - 1].dateStr;
 inputTo.value   = daily[TOTAL - 1].dateStr;
 

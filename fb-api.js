@@ -4,6 +4,7 @@ if (typeof FB_CONFIG === 'undefined') {
   );
 }
 
+const TZ      = 'Australia/Sydney';
 const FB_BASE = 'https://graph.facebook.com/v19.0';
 
 /* Maps Facebook campaign objective → { action type, display label } */
@@ -65,15 +66,22 @@ function getActionTotal(actionValues) {
 function setDateParams(params, { days, dateFrom, dateTo }) {
   if (dateFrom && dateTo) {
     params.set('time_range', JSON.stringify({ since: dateFrom, until: dateTo }));
+    console.log('[setDateParams] time_range:', dateFrom, '→', dateTo);
   } else {
     const PRESETS = { 7: 'last_7d', 30: 'last_30d', 90: 'last_90d' };
-    params.set('date_preset', PRESETS[days] || 'last_30_days');
+    const preset = PRESETS[days] || 'last_30d';
+    params.set('date_preset', preset);
+    console.log('[setDateParams] date_preset:', preset);
   }
 }
 
 function dayLabel(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ,
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(y, m - 1, d, 12, 0, 0));
 }
 
 async function fetchAllPages(firstUrl) {
@@ -151,6 +159,7 @@ async function fetchFBCampaignInsights(dateOpts) {
 
   return insData.map(c => {
     const meta = campMeta[c.campaign_id] || { status: 'PAUSED', actionType: 'link_click', label: 'Results' };
+    console.log('[FB Debug]', c.campaign_name, '| objective action:', meta.actionType, '| actions:', JSON.stringify(c.actions));
     const conv = meta.actionType
       ? getActionCountByType(c.actions, meta.actionType)
       : parseInt(c.reach || 0);
