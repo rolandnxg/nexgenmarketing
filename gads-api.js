@@ -1,4 +1,4 @@
-async function fetchGAdsDailyInsights(dateOpts) {
+async function fetchGAdsDailyInsights(dateOpts, customerId) {
   const { days, dateFrom, dateTo } = dateOpts;
   const params = new URLSearchParams();
   if (dateFrom && dateTo) {
@@ -7,6 +7,7 @@ async function fetchGAdsDailyInsights(dateOpts) {
   } else {
     params.set('days', days);
   }
+  if (customerId) params.set('customerId', customerId);
 
   const res  = await fetch(`/api/gads/daily?${params}`);
   const json = await res.json();
@@ -28,7 +29,7 @@ async function fetchGAdsDailyInsights(dateOpts) {
   });
 }
 
-async function fetchGAdsCampaigns(dateOpts) {
+async function fetchGAdsCampaigns(dateOpts, customerId) {
   const { days, dateFrom, dateTo } = dateOpts;
   const params = new URLSearchParams();
   if (dateFrom && dateTo) {
@@ -37,6 +38,7 @@ async function fetchGAdsCampaigns(dateOpts) {
   } else {
     params.set('days', days);
   }
+  if (customerId) params.set('customerId', customerId);
 
   const res  = await fetch(`/api/gads/campaigns?${params}`);
   const json = await res.json();

@@ -3,22 +3,73 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MarketIQ &mdash; Analytics Portal</title>
+  <title>NXG &mdash; Analytics Portal</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/otpauth@9.3.5/dist/otpauth.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
   <script src="config.js" defer></script>
   <script src="fb-api.js" defer></script>
   <script src="gads-api.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
+
+  <!-- Login screen -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-icon">M</div>
+        <span class="brand-name">NXG</span>
+      </div>
+      <h2 class="login-title" id="login-title">Sign in</h2>
+      <p class="login-sub" id="login-sub">Analytics Portal</p>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <div class="login-field">
+          <label class="login-label" for="login-username">Username</label>
+          <input type="text" id="login-username" class="login-input" placeholder="Enter username" autocomplete="username">
+        </div>
+        <div class="login-field">
+          <label class="login-label" for="login-password">Password</label>
+          <input type="password" id="login-password" class="login-input" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <div id="login-error" class="login-error hidden"></div>
+        <button type="submit" class="login-btn">Sign in</button>
+      </form>
+
+      <!-- MFA step (shown after password is verified) -->
+      <div id="mfa-step" class="mfa-step" style="display:none">
+        <div class="mfa-shield">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <p class="mfa-prompt">Enter the 6-digit code from<br>your authenticator app</p>
+        <input type="text" id="mfa-code" class="login-input mfa-code-input" placeholder="000 000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+        <div id="mfa-error" class="login-error hidden"></div>
+        <button type="button" class="login-btn" id="mfa-verify-btn">Verify</button>
+        <button type="button" class="mfa-back-btn" id="mfa-back-btn">&#8592; Back to sign in</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MFA setup modal -->
+  <div id="mfa-setup-modal" class="user-modal" style="display:none">
+    <div class="user-backdrop" id="mfa-setup-backdrop"></div>
+    <div class="user-modal-box">
+      <div class="user-modal-head">
+        <h3 id="mfa-setup-title">Set Up Two-Factor Authentication</h3>
+        <button class="user-modal-close" id="mfa-setup-close">&times;</button>
+      </div>
+      <div id="mfa-setup-body"></div>
+    </div>
+  </div>
+
   <div class="app">
 
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">M</div>
-        <span class="brand-name">MarketIQ</span>
+        <span class="brand-name">NXG</span>
       </div>
 
       <div class="nav-label">Platforms</div>
@@ -39,12 +90,32 @@
           <span class="nav-pip pip-gads"></span>
           Google Ads
         </button>
+        <button class="nav-item" data-platform="bark">
+          <span class="nav-pip pip-bark"></span>
+          Bark
+        </button>
+        <button class="nav-item" data-platform="mvf">
+          <span class="nav-pip pip-mvf"></span>
+          MVF
+        </button>
       </nav>
 
       <div class="sidebar-footer">
         <span class="live-dot"></span>
         Live: FB &amp; Google Ads &nbsp;|&nbsp; GA: Mock
       </div>
+      <button class="manage-users-btn" id="manage-users-btn" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Manage Users
+      </button>
+      <button class="clear-data-btn" id="clear-data-btn" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Clear Data
+      </button>
+      <button class="logout-btn" id="logout-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign out
+      </button>
     </aside>
 
     <!-- Main -->
@@ -55,11 +126,14 @@
           <p id="page-subtitle">All platforms combined</p>
         </div>
         <div class="date-controls">
+          <button id="import-csv-btn" class="import-csv-btn" style="display:none">&#8593; Import CSV</button>
+          <select id="brand-select" class="brand-select" style="display:none">
+            <option value="7066096988">NEXGEN</option>
+            <option value="4721419174">Business Telecom</option>
+            <option value="9197029288">Compare Business Phones</option>
+          </select>
           <div class="date-picker">
-            <button class="date-btn" data-days="7">7D</button>
-            <button class="date-btn active" data-days="30">30D</button>
-            <button class="date-btn" data-days="90">90D</button>
-            <button class="date-btn" id="date-custom-btn">Custom</button>
+            <button class="date-btn active" id="date-custom-btn">Date Range</button>
           </div>
           <div class="date-custom-panel hidden" id="date-custom-panel">
             <div class="dcp-group">
@@ -138,6 +212,8 @@
           <div class="table-header">
             <h3 id="table-title">Campaign Performance</h3>
             <span id="table-badge" class="table-badge"></span>
+            <button id="bark-import-btn" class="bark-sample-btn" style="margin-top:0;display:none">&#8593; Import CSV</button>
+            <button id="mvf-import-btn" class="mvf-sample-btn" style="margin-top:0;display:none">&#8593; Import CSV</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -150,5 +226,66 @@
       </div>
     </div>
   </div>
+
+  <!-- User management modal -->
+  <div id="user-modal" class="user-modal" style="display:none">
+    <div class="user-backdrop" id="user-backdrop"></div>
+    <div class="user-modal-box">
+      <div class="user-modal-head">
+        <h3>Manage Users</h3>
+        <button class="user-modal-close" id="user-modal-close">&times;</button>
+      </div>
+      <div class="user-modal-body">
+        <p class="user-section-label">Current Users</p>
+        <div class="user-list" id="user-list"></div>
+
+        <p class="user-section-label" style="margin-top:20px">Add New User</p>
+        <form id="add-user-form" class="add-user-form" autocomplete="off">
+          <div class="add-user-row">
+            <div class="add-user-field">
+              <label class="add-user-label">Username</label>
+              <input type="text" id="new-username" class="add-user-input" placeholder="e.g. john" autocomplete="off">
+            </div>
+            <div class="add-user-field">
+              <label class="add-user-label">Password</label>
+              <input type="password" id="new-password" class="add-user-input" placeholder="Password" autocomplete="new-password">
+            </div>
+            <div class="add-user-field add-user-field--role">
+              <label class="add-user-label">Role</label>
+              <select id="new-role" class="add-user-select">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div id="add-user-error" class="add-user-error" style="display:none"></div>
+          <button type="submit" class="add-user-btn">Add User</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shared CSV upload modal -->
+  <div id="upload-modal" class="upload-modal" style="display:none">
+    <div class="upload-backdrop" id="upload-backdrop"></div>
+    <div class="upload-modal-box">
+      <div class="upload-modal-head">
+        <h3 id="upload-modal-title">Import CSV</h3>
+        <button class="upload-modal-close" id="upload-modal-close">&times;</button>
+      </div>
+      <div class="upload-dropzone" id="upload-dropzone">
+        <div class="upload-drop-icon">📄</div>
+        <p class="upload-drop-title" id="upload-drop-title">Import your CSV</p>
+        <p class="upload-drop-sub">Drag &amp; drop a file, or <label for="upload-file" id="upload-file-label" class="upload-file-label">browse</label></p>
+        <input type="file" id="upload-file" accept=".csv,.txt" style="display:none">
+        <div class="upload-drop-format">
+          Required columns: <strong>date</strong>, <strong>spend</strong><br>
+          Optional: <strong>leads</strong> &nbsp;|&nbsp; <strong>revenue</strong> &nbsp;|&nbsp; <strong>category</strong>
+        </div>
+        <button id="upload-sample-btn" class="upload-sample-btn">&#8595; Download sample CSV</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

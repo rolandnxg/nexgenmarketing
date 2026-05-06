@@ -85,15 +85,26 @@ const topPages = [
 ];
 
 /* ── State ──────────────────────────────────────────────── */
-let platform        = 'all';
-let days            = 30;
-let dateFrom        = null;
-let dateTo          = null;
-let charts          = {};
-let fbApiDaily      = [];
-let fbApiCampaigns  = [];
-let gadsApiDaily    = [];
+const GADS_BRANDS = [
+  { id: '7066096988', name: 'NEXGEN',                 donutLabel: 'Nexgen Google Ads' },
+  { id: '4721419174', name: 'Business Telecom',        donutLabel: 'BTEL Google Ads'   },
+  { id: '9197029288', name: 'Compare Business Phones', donutLabel: 'CBP Google Ads'    },
+];
+
+let barkData              = [];
+let mvfData               = [];
+let overviewGadsDaily     = [];
+let overviewGadsCampaigns = [];
+let platform         = 'all';
+let days             = 30;
+let dateFrom         = null;
+let dateTo           = null;
+let charts           = {};
+let fbApiDaily       = [];
+let fbApiCampaigns   = [];
+let gadsApiDaily     = [];
 let gadsApiCampaigns = [];
+let gadsBrand        = GADS_BRANDS[0].id;
 
 /* ── Helpers ────────────────────────────────────────────── */
 const sum  = (arr, k) => arr.reduce((a, d) => a + d[k], 0);
@@ -155,13 +166,16 @@ function buildKPIs(s) {
     const conv     = sum(s, 'fb_conversions') + sum(s, 'gads_conversions');
     const sent     = sum(s, 'email_sent');
     const opened   = sum(s, 'email_opened');
+    const sixthKPI = sent > 0
+      ? { label: 'Email Open Rate', value: fmtPct((opened / sent) * 100), pct: randChange(1, 10), up: true }
+      : { label: 'Impressions', value: fmtN(sum(s, 'fb_impressions') + sum(s, 'gads_impressions')), pct: randChange(3, 20), up: true };
     return [
-      { label: 'Revenue',         value: fmt$(revenue),                      pct: randChange(5, 28),  up: true  },
-      { label: 'Ad Spend',        value: fmt$(spend),                        pct: randChange(2, 18),  up: false },
-      { label: 'ROAS',            value: (revenue / spend).toFixed(2) + 'x', pct: randChange(1, 15),  up: true  },
-      { label: 'Traffic',         value: fmtN(traffic),                      pct: randChange(3, 30),  up: true  },
-      { label: 'Conversions',     value: fmtN(conv),                         pct: randChange(4, 22),  up: true  },
-      { label: 'Email Open Rate', value: fmtPct((opened / sent) * 100),      pct: randChange(1, 10),  up: true  },
+      { label: 'Revenue',     value: fmt$(revenue),                                              pct: randChange(5, 28), up: true  },
+      { label: 'Ad Spend',    value: fmt$(spend),                                                pct: randChange(2, 18), up: false },
+      { label: 'ROAS',        value: spend > 0 ? (revenue / spend).toFixed(2) + 'x' : '—',     pct: randChange(1, 15), up: true  },
+      { label: 'Conversions', value: fmtN(conv),                                                 pct: randChange(4, 22), up: true  },
+      { label: 'Traffic',     value: traffic > 0 ? fmtN(traffic) : '—',                         pct: randChange(3, 30), up: true  },
+      sixthKPI,
     ];
   }
   if (platform === 'ga') {
@@ -197,6 +211,38 @@ function buildKPIs(s) {
       { label: 'Avg CPC',      value: fmt$(cpc),     pct: randChange(1, 12), up: false },
     ];
   }
+  if (platform === 'bark') {
+    const spend  = sum(s, 'spend');
+    const leads  = sum(s, 'leads');
+    const rev    = sum(s, 'revenue');
+    const cpl    = leads > 0 ? spend / leads : 0;
+    const roas   = spend > 0 && rev > 0 ? rev / spend : null;
+    return [
+      { label: 'Total Spend',    value: fmt$(spend),                             pct: randChange(2, 18), up: false },
+      { label: 'Total Leads',    value: fmtN(leads),                             pct: randChange(5, 25), up: true  },
+      { label: 'Cost / Lead',    value: cpl > 0 ? fmt$(cpl) : '—',              pct: randChange(1, 12), up: false },
+      { label: 'Revenue',        value: rev > 0 ? fmt$(rev) : '—',              pct: randChange(3, 20), up: true  },
+      { label: 'ROAS',           value: roas ? roas.toFixed(2) + 'x' : '—',    pct: randChange(2, 15), up: true  },
+      { label: 'Days Imported',  value: fmtN(s.length),                         pct: 0,                 up: true  },
+    ];
+  }
+
+  if (platform === 'mvf') {
+    const spend  = sum(s, 'spend');
+    const leads  = sum(s, 'leads');
+    const rev    = sum(s, 'revenue');
+    const cpl    = leads > 0 ? spend / leads : 0;
+    const roas   = spend > 0 && rev > 0 ? rev / spend : null;
+    return [
+      { label: 'Total Spend',    value: fmt$(spend),                             pct: randChange(2, 18), up: false },
+      { label: 'Total Leads',    value: fmtN(leads),                             pct: randChange(5, 25), up: true  },
+      { label: 'Cost / Lead',    value: cpl > 0 ? fmt$(cpl) : '—',              pct: randChange(1, 12), up: false },
+      { label: 'Revenue',        value: rev > 0 ? fmt$(rev) : '—',              pct: randChange(3, 20), up: true  },
+      { label: 'ROAS',           value: roas ? roas.toFixed(2) + 'x' : '—',    pct: randChange(2, 15), up: true  },
+      { label: 'Days Imported',  value: fmtN(s.length),                         pct: 0,                 up: true  },
+    ];
+  }
+
   if (platform === 'gads') {
     const impr   = sum(s, 'gads_impressions');
     const clicks = sum(s, 'gads_clicks');
@@ -271,6 +317,27 @@ function getChartConfigs(s) {
     const fbTot   = sum(s, 'fb_spend');
     const gadsTot = sum(s, 'gads_spend');
 
+    // Per-brand GAdS spend from campaign data
+    const BRAND_COLORS = { '7066096988': '#FBBC05', '4721419174': '#f59e0b', '9197029288': '#b45309' };
+    const brandSpend   = {};
+    for (const c of overviewGadsCampaigns) {
+      if (c.customerId) brandSpend[c.customerId] = (brandSpend[c.customerId] || 0) + c.spend;
+    }
+    const hasBrandData   = GADS_BRANDS.some(b => (brandSpend[b.id] || 0) > 0);
+    const gadsDonutItems = hasBrandData
+      ? GADS_BRANDS.map(b => ({ label: b.donutLabel, color: BRAND_COLORS[b.id], value: Math.round(brandSpend[b.id] || 0) })).filter(e => e.value > 0)
+      : gadsTot > 0 ? [{ label: 'Google Ads', color: '#FBBC05', value: Math.round(gadsTot) }] : [];
+
+    const barkTot = sum(barkData, 'spend');
+    const mvfTot  = sum(mvfData,  'spend');
+
+    const allDonutItems = [
+      { label: 'Facebook Ads', color: '#1877F2', value: Math.round(fbTot) },
+      ...gadsDonutItems,
+      ...(barkTot > 0 ? [{ label: 'Bark', color: '#06b6d4', value: Math.round(barkTot) }] : []),
+      ...(mvfTot  > 0 ? [{ label: 'MVF',  color: '#f97316', value: Math.round(mvfTot)  }] : []),
+    ].filter(e => e.value > 0);
+
     return {
       mainTitle:  'Revenue & Ad Spend',
       mainSub:    'Daily trend',
@@ -324,17 +391,14 @@ function getChartConfigs(s) {
       donut: () => ({
         type: 'doughnut',
         data: {
-          labels: ['Facebook Ads', 'Google Ads'],
-          datasets: [{ data: [Math.round(fbTot), Math.round(gadsTot)], backgroundColor: ['#1877F2', '#FBBC05'], borderWidth: 0, hoverOffset: 4 }],
+          labels: allDonutItems.map(e => e.label),
+          datasets: [{ data: allDonutItems.map(e => e.value), backgroundColor: allDonutItems.map(e => e.color), borderWidth: 0, hoverOffset: 4 }],
         },
         options: {
           responsive: true, maintainAspectRatio: false, cutout: '72%',
           plugins: { legend: { display: false } },
         },
-        legendItems: [
-          { label: 'Facebook Ads', color: '#1877F2', value: fmt$(fbTot) },
-          { label: 'Google Ads',   color: '#FBBC05', value: fmt$(gadsTot) },
-        ],
+        legendItems: allDonutItems.map(e => ({ label: e.label, color: e.color, value: fmt$(e.value) })),
       }),
 
       bar: (ctx) => ({
@@ -590,6 +654,190 @@ function getChartConfigs(s) {
     };
   }
 
+  if (platform === 'bark') {
+    const spend  = s.map(d => d.spend);
+    const leads  = s.map(d => d.leads);
+    const cpl    = s.map(d => d.leads > 0 ? parseFloat((d.spend / d.leads).toFixed(2)) : 0);
+    const totSpend = sum(s, 'spend');
+    const totLeads = sum(s, 'leads');
+
+    return {
+      mainTitle:  'Daily Spend',
+      mainSub:    'Bark lead marketplace',
+      donutTitle: 'Summary',
+      barTitle:   'Leads per Day',
+      lineTitle:  'Cost per Lead',
+
+      main: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Spend',
+            data: spend,
+            borderColor: '#06b6d4',
+            backgroundColor: makeGradient(ctx, '#06b6d4', .2),
+            fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { callback: v => '$' + v, color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      donut: () => ({
+        type: 'doughnut',
+        data: {
+          labels: ['Spend', 'Leads (×$10)'],
+          datasets: [{ data: [Math.round(totSpend), totLeads * 10], backgroundColor: ['#06b6d4','#0e7490'], borderWidth: 0, hoverOffset: 4 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '72%',
+          plugins: { legend: { display: false } },
+        },
+        legendItems: [
+          { label: 'Total Spend', color: '#06b6d4', value: fmt$(totSpend) },
+          { label: 'Total Leads', color: '#0e7490', value: fmtN(totLeads) },
+        ],
+      }),
+
+      bar: () => ({
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Leads', data: leads, backgroundColor: 'rgba(6,182,212,.65)', borderRadius: 3 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      line: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Cost / Lead',
+            data: cpl,
+            borderColor: '#06b6d4',
+            backgroundColor: makeGradient(ctx, '#06b6d4', .15),
+            fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { callback: v => '$' + v, color: TICK_COLOR } }) },
+          },
+        },
+      }),
+    };
+  }
+
+  if (platform === 'mvf') {
+    const spend  = s.map(d => d.spend);
+    const leads  = s.map(d => d.leads);
+    const cpl    = s.map(d => d.leads > 0 ? parseFloat((d.spend / d.leads).toFixed(2)) : 0);
+    const totSpend = sum(s, 'spend');
+    const totLeads = sum(s, 'leads');
+
+    return {
+      mainTitle:  'Daily Spend',
+      mainSub:    'MVF lead generation',
+      donutTitle: 'Summary',
+      barTitle:   'Leads per Day',
+      lineTitle:  'Cost per Lead',
+
+      main: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Spend',
+            data: spend,
+            borderColor: '#f97316',
+            backgroundColor: makeGradient(ctx, '#f97316', .2),
+            fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { callback: v => '$' + v, color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      donut: () => ({
+        type: 'doughnut',
+        data: {
+          labels: ['Spend', 'Leads (×$10)'],
+          datasets: [{ data: [Math.round(totSpend), totLeads * 10], backgroundColor: ['#f97316','#c2410c'], borderWidth: 0, hoverOffset: 4 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '72%',
+          plugins: { legend: { display: false } },
+        },
+        legendItems: [
+          { label: 'Total Spend', color: '#f97316', value: fmt$(totSpend) },
+          { label: 'Total Leads', color: '#c2410c', value: fmtN(totLeads) },
+        ],
+      }),
+
+      bar: () => ({
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Leads', data: leads, backgroundColor: 'rgba(249,115,22,.65)', borderRadius: 3 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      line: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Cost / Lead',
+            data: cpl,
+            borderColor: '#f97316',
+            backgroundColor: makeGradient(ctx, '#f97316', .15),
+            fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ min: 0, ticks: { callback: v => '$' + v, color: TICK_COLOR } }) },
+          },
+        },
+      }),
+    };
+  }
+
   if (platform === 'gads') {
     const spend = s.map(d => d.gads_spend);
     const conv  = s.map(d => d.gads_conversions);
@@ -691,7 +939,7 @@ function getChartConfigs(s) {
           plugins: { legend: { display: false } },
           scales: {
             x: { ...baseScaleX(labels) },
-            y: { ...baseScaleY({ ticks: { callback: v => v + 'x', color: TICK_COLOR } }) },
+            y: { ...baseScaleY({ min: 0, ticks: { callback: v => v + 'x', color: TICK_COLOR } }) },
           },
         },
       }),
@@ -762,8 +1010,52 @@ function renderTable() {
     return;
   }
 
-  const rows = (platform === 'fb'   && fbApiCampaigns.length   > 0 ? fbApiCampaigns
-             : platform === 'gads' && gadsApiCampaigns.length > 0 ? gadsApiCampaigns
+  if (platform === 'mvf') {
+    document.getElementById('table-title').textContent = 'MVF — Imported Data';
+    badge.textContent = mvfData.length + ' rows';
+    const hasCat = mvfData.some(d => d.category);
+    const hasRev = mvfData.some(d => d.revenue > 0);
+    const cols   = ['Date','Spend','Leads','Cost / Lead', ...(hasRev ? ['Revenue'] : []), ...(hasCat ? ['Category'] : [])];
+    head.innerHTML = '<tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
+    body.innerHTML = mvfData.map(d => {
+      const cpl = d.leads > 0 ? fmt$(d.spend / d.leads) : '&mdash;';
+      return `<tr>
+        <td>${d.label}</td>
+        <td>${fmt$(d.spend)}</td>
+        <td>${fmtN(d.leads)}</td>
+        <td>${cpl}</td>
+        ${hasRev ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
+        ${hasCat ? `<td>${d.category || '&mdash;'}</td>` : ''}
+      </tr>`;
+    }).join('');
+    return;
+  }
+
+  if (platform === 'bark') {
+    document.getElementById('table-title').textContent = 'Bark — Imported Data';
+    badge.textContent = barkData.length + ' rows';
+    const hasCat = barkData.some(d => d.category);
+    const hasRev = barkData.some(d => d.revenue > 0);
+    const cols   = ['Date','Spend','Leads','Cost / Lead', ...(hasRev ? ['Revenue'] : []), ...(hasCat ? ['Category'] : [])];
+    head.innerHTML = '<tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
+    body.innerHTML = barkData.map(d => {
+      const cpl = d.leads > 0 ? fmt$(d.spend / d.leads) : '&mdash;';
+      return `<tr>
+        <td>${d.label}</td>
+        <td>${fmt$(d.spend)}</td>
+        <td>${fmtN(d.leads)}</td>
+        <td>${cpl}</td>
+        ${hasRev ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
+        ${hasCat ? `<td>${d.category || '&mdash;'}</td>` : ''}
+      </tr>`;
+    }).join('');
+    return;
+  }
+
+  const rows = (platform === 'fb'   && fbApiCampaigns.length     > 0 ? fbApiCampaigns
+             : platform === 'gads' && gadsApiCampaigns.length   > 0 ? gadsApiCampaigns
+             : platform === 'all'  && (overviewGadsCampaigns.length > 0 || fbApiCampaigns.length > 0)
+               ? [...overviewGadsCampaigns, ...fbApiCampaigns]
              : platform === 'all' ? campaigns
              : campaigns.filter(c => c.platform === platform))
              .filter(c => platform !== 'fb' || c.status === 'active');
@@ -772,18 +1064,19 @@ function renderTable() {
   badge.textContent = rows.length + ' campaigns';
 
   const isFB   = platform === 'fb';
+  const isGads = platform === 'gads';
   const isAll  = platform === 'all';
 
   const heads = isAll  ? ['Campaign','Platform','Spend','Revenue','ROAS','Conversions','Status']
               : isFB   ? ['Campaign','Spend','Impressions','Reach','Result','Cost / Result','Status']
+              : isGads ? ['Campaign','Spend','Impressions','Clicks','Conversions','Cost / Conv','ROAS','Status']
               :          ['Campaign','Spend','Revenue','ROAS','Conversions','Status'];
 
   head.innerHTML = '<tr>' + heads.map(h => `<th>${h}</th>`).join('') + '</tr>';
   body.innerHTML = rows.map(c => {
     const roas       = c.spend > 0 && c.revenue > 0 ? (c.revenue / c.spend) : null;
-    const roasCls    = roas !== null ? roasClass(roas) : '';
-    const roasVal    = roas !== null ? roas.toFixed(2) + 'x' : '&mdash;';
-    const costPerRes = c.conv  > 0 ? fmt$(c.spend / c.conv) : '&mdash;';
+    const roasCls    = roas !== null && roas >= 0.01 ? roasClass(roas) : '';
+    const costPerRes = c.conv > 0 ? fmt$(c.spend / c.conv) : '&mdash;';
     const pBadge     = `<span class="platform-badge badge-${c.platform}">${c.platform === 'fb' ? 'FB' : c.platform === 'gads' ? 'GAdS' : 'GA'}</span>`;
     const stBadge    = `<span class="status-badge status-${c.status}"><span class="status-dot-sm"></span>${c.status}</span>`;
 
@@ -795,12 +1088,21 @@ function renderTable() {
       <td><div class="result-cell"><span class="result-pill">${fmtN(c.conv)}</span><span class="result-type">${c.resultLabel || 'Results'}</span></div></td>
       <td>${costPerRes}</td>
       <td>${stBadge}</td>`
+    : isGads ? `
+      <td>${c.name}</td>
+      <td>${fmt$(c.spend)}</td>
+      <td>${fmtN(c.impressions ?? 0)}</td>
+      <td>${fmtN(c.clicks      ?? 0)}</td>
+      <td>${fmtN(c.conv)}</td>
+      <td>${costPerRes}</td>
+      <td class="${roasCls}">${roas !== null && roas >= 0.01 ? roas.toFixed(2) + 'x' : '&mdash;'}</td>
+      <td>${stBadge}</td>`
     : `
       <td>${c.name}</td>
       ${isAll ? `<td>${pBadge}</td>` : ''}
       <td>${fmt$(c.spend)}</td>
       <td>${fmt$(c.revenue)}</td>
-      <td class="${roasCls}">${roas.toFixed(2)}x</td>
+      <td class="${roasCls}">${roas !== null && roas >= 0.01 ? roas.toFixed(2) + 'x' : '&mdash;'}</td>
       <td>${fmtN(c.conv)}</td>
       <td>${stBadge}</td>`;
 
@@ -814,12 +1116,52 @@ const PLATFORM_META = {
   ga:   { title: 'Google Analytics',  sub: 'Website traffic & behaviour' },
   fb:   { title: 'Facebook Ads',      sub: 'Paid social performance' },
   gads: { title: 'Google Ads',        sub: 'Search & display performance' },
+  bark: { title: 'Bark',              sub: 'Lead marketplace performance' },
+  mvf:  { title: 'MVF',              sub: 'MVF lead generation performance' },
 };
 
 function renderHeader() {
   const m = PLATFORM_META[platform];
-  document.getElementById('page-title').textContent   = m.title;
+  document.getElementById('page-title').textContent    = m.title;
   document.getElementById('page-subtitle').textContent = m.sub;
+  document.getElementById('brand-select').style.display = platform === 'gads' ? '' : 'none';
+  document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf') ? '' : 'none';
+  const importBtn = document.getElementById('bark-import-btn');
+  if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
+  const mvfImportBtn = document.getElementById('mvf-import-btn');
+  if (mvfImportBtn) mvfImportBtn.style.display = (platform === 'mvf' && mvfData.length > 0) ? '' : 'none';
+}
+
+/* ── Overview data builder ──────────────────────────────── */
+function buildOverviewData(gadsDaily, fbDaily) {
+  const byDate = {};
+  for (const d of gadsDaily) {
+    byDate[d.dateStr] = {
+      dateStr: d.dateStr, label: d.label,
+      gads_impressions: d.gads_impressions, gads_clicks: d.gads_clicks,
+      gads_spend: d.gads_spend, gads_conversions: d.gads_conversions,
+      revenue: d.revenue,
+      fb_impressions: 0, fb_reach: 0, fb_clicks: 0, fb_spend: 0, fb_conversions: 0,
+      ga_sessions: 0, email_sent: 0, email_opened: 0,
+    };
+  }
+  for (const d of fbDaily) {
+    if (!byDate[d.dateStr]) {
+      byDate[d.dateStr] = {
+        dateStr: d.dateStr, label: d.label,
+        gads_impressions: 0, gads_clicks: 0, gads_spend: 0, gads_conversions: 0, revenue: 0,
+        fb_impressions: 0, fb_reach: 0, fb_clicks: 0, fb_spend: 0, fb_conversions: 0,
+        ga_sessions: 0, email_sent: 0, email_opened: 0,
+      };
+    }
+    byDate[d.dateStr].fb_impressions += d.fb_impressions;
+    byDate[d.dateStr].fb_reach       += d.fb_reach;
+    byDate[d.dateStr].fb_clicks      += d.fb_clicks;
+    byDate[d.dateStr].fb_spend       += d.fb_spend;
+    byDate[d.dateStr].fb_conversions += d.fb_conversions;
+    byDate[d.dateStr].revenue        += d.revenue;
+  }
+  return Object.values(byDate).sort((a, b) => a.dateStr.localeCompare(b.dateStr));
 }
 
 /* ── Master update ──────────────────────────────────────── */
@@ -827,6 +1169,22 @@ async function update() {
   hideError();
 
   const dateOpts = { days, dateFrom, dateTo };
+
+  if (platform === 'all') {
+    document.getElementById('loading-msg').textContent = 'Fetching all brands data…';
+    showLoading(true);
+    const [gadsRes, fbRes] = await Promise.allSettled([
+      Promise.all([fetchGAdsDailyInsights(dateOpts, null), fetchGAdsCampaigns(dateOpts, null)]),
+      Promise.all([fetchFBDailyInsights(dateOpts), fetchFBCampaignInsights(dateOpts)]),
+    ]);
+    showLoading(false);
+    const errs = [];
+    if (gadsRes.status === 'fulfilled') [overviewGadsDaily, overviewGadsCampaigns] = gadsRes.value;
+    else errs.push('GAdS: ' + gadsRes.reason.message);
+    if (fbRes.status === 'fulfilled') [fbApiDaily, fbApiCampaigns] = fbRes.value;
+    else errs.push('FB: ' + fbRes.reason.message);
+    if (errs.length) showError(errs.join(' | '));
+  }
 
   if (platform === 'fb') {
     document.getElementById('loading-msg').textContent = 'Fetching Facebook Ads data…';
@@ -849,8 +1207,8 @@ async function update() {
     showLoading(true);
     try {
       [gadsApiDaily, gadsApiCampaigns] = await Promise.all([
-        fetchGAdsDailyInsights(dateOpts),
-        fetchGAdsCampaigns(dateOpts),
+        fetchGAdsDailyInsights(dateOpts, gadsBrand),
+        fetchGAdsCampaigns(dateOpts, gadsBrand),
       ]);
     } catch (err) {
       showLoading(false);
@@ -860,10 +1218,29 @@ async function update() {
     showLoading(false);
   }
 
+  renderHeader();
+
+  const showUpload    = platform === 'bark' && barkData.length === 0;
+  const showMvfUpload = platform === 'mvf'  && mvfData.length  === 0;
+
+  if (showUpload || showMvfUpload) {
+    document.getElementById('kpi-grid').innerHTML = '';
+    ['main','donut','bar','line'].forEach(id => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } });
+    document.getElementById('donut-legend').innerHTML = '';
+    document.getElementById('table-head').innerHTML = '';
+    document.getElementById('table-body').innerHTML = '';
+    document.getElementById('table-badge').textContent = '';
+    showLoading(false);
+    return;
+  }
+
   const s = platform === 'fb'   ? fbApiDaily
           : platform === 'gads' && gadsApiDaily.length > 0 ? gadsApiDaily
+          : platform === 'bark' ? barkData
+          : platform === 'mvf'  ? mvfData
+          : platform === 'all' && overviewGadsDaily.length > 0
+            ? buildOverviewData(overviewGadsDaily, fbApiDaily)
           : slice();
-  renderHeader();
   renderKPIs(s);
   renderCharts(s);
   renderTable();
@@ -875,22 +1252,11 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     platform = btn.dataset.platform;
+    closeUploadModal();
     update();
   });
 });
 
-document.querySelectorAll('.date-btn[data-days]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    days = parseInt(btn.dataset.days);
-    dateFrom = null;
-    dateTo   = null;
-    customBtn.textContent = 'Custom';
-    customPanel.classList.add('hidden');
-    update();
-  });
-});
 
 /* ── Custom date range ──────────────────────────────────── */
 const customBtn   = document.getElementById('date-custom-btn');
@@ -937,9 +1303,6 @@ applyBtn.addEventListener('click', () => {
   dateFrom = from;
   dateTo   = to;
 
-  document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
-  customBtn.classList.add('active');
-
   const fmt = str => {
     const [y, m, d] = str.split('-');
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -950,11 +1313,551 @@ applyBtn.addEventListener('click', () => {
   update();
 });
 
+document.getElementById('brand-select').addEventListener('change', e => {
+  gadsBrand = e.target.value;
+  gadsApiDaily     = [];
+  gadsApiCampaigns = [];
+  update();
+});
+
+/* ── Bark CSV import ────────────────────────────────────── */
+function normalizeDateStr(raw) {
+  if (!raw) return null;
+  raw = raw.trim().replace(/['"]/g, '');
+  /* ISO: 2024-01-15 */
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  /* DD/MM/YYYY or D/M/YYYY (Australian) */
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  /* MM/DD/YYYY */
+  const mdy = raw.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (mdy) {
+    const [, m, d, y] = mdy;
+    return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  }
+  /* Try native parse as fallback */
+  const dt = new Date(raw);
+  if (!isNaN(dt)) return toDateStr(dt);
+  return null;
+}
+
+function parseCSVLine(line) {
+  const cells = [];
+  let cur = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === ',' && !inQ) { cells.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur);
+  return cells.map(c => c.trim().replace(/^"|"$/g, ''));
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) throw new Error('CSV needs a header row and at least one data row.');
+
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
+  const col = name => headers.findIndex(h => h.includes(name));
+
+  const iDate   = col('date') >= 0 ? col('date') : col('day');
+  const iSpend  = col('spend') >= 0 ? col('spend') : col('cost') >= 0 ? col('cost') : col('amount') >= 0 ? col('amount') : col('credit');
+  const iLeads  = col('lead') >= 0 ? col('lead') : col('conversion') >= 0 ? col('conversion') : col('enquir');
+  const iRev    = col('revenue') >= 0 ? col('revenue') : col('value') >= 0 ? col('value') : col('sale');
+  const iCat    = col('category') >= 0 ? col('category') : col('type');
+
+  if (iDate < 0)  throw new Error('No date column found. Add a "date" column.');
+  if (iSpend < 0) throw new Error('No spend/cost column found. Add a "spend" column.');
+
+  const byDate = {};
+  lines.slice(1).forEach(line => {
+    const cells   = parseCSVLine(line);
+    const dateStr = normalizeDateStr(cells[iDate]);
+    if (!dateStr) return;
+    if (!byDate[dateStr]) byDate[dateStr] = { dateStr, spend: 0, leads: 0, revenue: 0, category: '' };
+    byDate[dateStr].spend   += parseFloat((cells[iSpend]  || '0').replace(/[$,]/g, '')) || 0;
+    if (iLeads >= 0) byDate[dateStr].leads += parseInt(cells[iLeads] || 0) || 0;
+    else             byDate[dateStr].leads += 1; // no leads column — each row = 1 lead
+    if (iRev   >= 0) byDate[dateStr].revenue += parseFloat((cells[iRev] || '0').replace(/[$,]/g, '')) || 0;
+    if (iCat   >= 0 && cells[iCat]) byDate[dateStr].category = cells[iCat];
+  });
+
+  return Object.values(byDate)
+    .map(d => {
+      const [y, m, day] = d.dateStr.split('-').map(Number);
+      return { ...d, label: new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric' }).format(new Date(y, m - 1, day, 12)) };
+    })
+    .sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+}
+
+function saveToLocal(platform, data) {
+  try { localStorage.setItem(`nxg_${platform}`, JSON.stringify(data)); }
+  catch { showError('Save failed: storage full'); }
+}
+function clearFromLocal(platform) {
+  localStorage.removeItem(`nxg_${platform}`);
+}
+function loadFromLocal(platform) {
+  try { const d = localStorage.getItem(`nxg_${platform}`); return d ? JSON.parse(d) : []; }
+  catch { return []; }
+}
+
+function loadBarkCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      barkData = parseCSV(e.target.result);
+      if (barkData.length === 0) throw new Error('No valid rows found in CSV.');
+      saveToLocal('bark', barkData);
+      closeUploadModal();
+      update();
+    } catch (err) {
+      showError('Bark CSV: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('bark-import-btn').addEventListener('click', () => { barkData = []; clearFromLocal('bark'); update(); });
+
+/* ── MVF CSV import ─────────────────────────────────────── */
+function loadMVFCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      mvfData = parseCSV(e.target.result);
+      if (mvfData.length === 0) throw new Error('No valid rows found in CSV.');
+      saveToLocal('mvf', mvfData);
+      closeUploadModal();
+      update();
+    } catch (err) {
+      showError('MVF CSV: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('mvf-import-btn').addEventListener('click', () => { mvfData = []; clearFromLocal('mvf'); update(); });
+
+/* ── Shared upload modal ────────────────────────────────── */
+let _uploadColor = '#06b6d4';
+
+function openUploadModal(p) {
+  _uploadColor = p === 'bark' ? '#06b6d4' : '#f97316';
+  const name   = p === 'bark' ? 'Bark' : 'MVF';
+  const samples = {
+    bark: ['date,spend,leads,revenue,category','01/05/2025,250.00,5,4500.00,Phone Systems','02/05/2025,180.00,3,2700.00,VoIP','03/05/2025,310.00,7,6300.00,Phone Systems','04/05/2025,95.00,2,1800.00,Phone Systems','05/05/2025,220.00,4,3600.00,VoIP'].join('\n'),
+    mvf:  ['date,spend,leads,revenue,category','01/05/2025,320.00,8,7200.00,Business Phones','02/05/2025,210.00,5,4500.00,VoIP','03/05/2025,450.00,11,9900.00,Business Phones','04/05/2025,130.00,3,2700.00,Broadband','05/05/2025,280.00,7,6300.00,Business Phones'].join('\n'),
+  };
+  document.getElementById('upload-modal-title').textContent = `Import ${name} CSV`;
+  document.getElementById('upload-drop-title').textContent  = `Import your ${name} CSV`;
+  document.getElementById('upload-file-label').style.color  = _uploadColor;
+  const sampleBtn = document.getElementById('upload-sample-btn');
+  sampleBtn.style.color = _uploadColor;
+  sampleBtn._csv  = samples[p];
+  sampleBtn._name = `${p}-sample.csv`;
+  document.getElementById('upload-modal').style.display = 'flex';
+  document.getElementById('upload-file').value = '';
+}
+
+function closeUploadModal() {
+  document.getElementById('upload-modal').style.display = 'none';
+}
+
+const uploadDropzone = document.getElementById('upload-dropzone');
+const uploadFile     = document.getElementById('upload-file');
+
+uploadDropzone.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadDropzone.style.borderColor = _uploadColor;
+  uploadDropzone.classList.add('drag-over');
+});
+uploadDropzone.addEventListener('dragleave', () => {
+  uploadDropzone.style.borderColor = '';
+  uploadDropzone.classList.remove('drag-over');
+});
+uploadDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadDropzone.style.borderColor = '';
+  uploadDropzone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) (platform === 'bark' ? loadBarkCSV : loadMVFCSV)(file);
+});
+uploadDropzone.addEventListener('click', () => uploadFile.click());
+uploadFile.addEventListener('change', e => {
+  if (e.target.files[0]) (platform === 'bark' ? loadBarkCSV : loadMVFCSV)(e.target.files[0]);
+});
+
+document.getElementById('upload-sample-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  const btn  = document.getElementById('upload-sample-btn');
+  const blob = new Blob([btn._csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = btn._name; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('upload-modal-close').addEventListener('click', closeUploadModal);
+document.getElementById('upload-backdrop').addEventListener('click', closeUploadModal);
+document.getElementById('import-csv-btn').addEventListener('click', () => {
+  if (platform === 'bark') { barkData = []; clearFromLocal('bark'); }
+  if (platform === 'mvf')  { mvfData  = []; clearFromLocal('mvf');  }
+  openUploadModal(platform);
+});
 document.getElementById('error-close').addEventListener('click', hideError);
 
-/* ── Init ───────────────────────────────────────────────── */
-try {
-  update();
-} catch (e) {
-  showError(e.message);
+/* ── Auth & User management ─────────────────────────────── */
+const SESSION_KEY = 'nxg_auth';
+const USERS_KEY   = 'nxg_users';
+
+let currentUser    = null;
+let _pendingMFAUser = null;   // user awaiting TOTP verification at login
+let _mfaSetupState  = null;   // { username, secret } during setup flow
+
+function loadUsers() {
+  try {
+    const d = localStorage.getItem(USERS_KEY);
+    if (d) return JSON.parse(d);
+  } catch {}
+  return [{ username: 'admin', password: 'marketiq2025', role: 'admin', mfaSecret: null }];
 }
+
+function saveUsers(users) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function applyRoleUI() {
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  document.getElementById('manage-users-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('clear-data-btn').style.display   = isAdmin ? '' : 'none';
+}
+
+const loginScreen = document.getElementById('login-screen');
+
+function doLogin(user) {
+  currentUser = user;
+  loginScreen.classList.add('hidden');
+  applyRoleUI();
+  const barkSaved = loadFromLocal('bark');
+  const mvfSaved  = loadFromLocal('mvf');
+  if (barkSaved.length > 0) barkData = barkSaved;
+  if (mvfSaved.length  > 0) mvfData  = mvfSaved;
+  try { update(); } catch (e) { showError(e.message); }
+}
+
+function doLogout() {
+  sessionStorage.removeItem(SESSION_KEY);
+  currentUser     = null;
+  _pendingMFAUser = null;
+  loginScreen.classList.remove('hidden');
+  showLoginForm();
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+}
+
+/* ── MFA helpers ─────────────────────────────────────────── */
+function generateTOTPSecret() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => chars[b % 32]).join('');
+}
+
+function verifyTOTP(secret, token) {
+  try {
+    const totp  = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(secret), digits: 6, period: 30 });
+    return totp.validate({ token: token.replace(/\s/g, ''), window: 1 }) !== null;
+  } catch { return false; }
+}
+
+function getTOTPUri(secret, username) {
+  return new OTPAuth.TOTP({
+    issuer: 'NXG Analytics',
+    label:  username,
+    secret: OTPAuth.Secret.fromBase32(secret),
+    digits: 6,
+    period: 30,
+  }).toString();
+}
+
+/* ── Login form / MFA step toggle ───────────────────────── */
+function showLoginForm() {
+  document.getElementById('login-form').style.display  = '';
+  document.getElementById('mfa-step').style.display    = 'none';
+  document.getElementById('login-title').textContent   = 'Sign in';
+  document.getElementById('login-sub').textContent     = 'Analytics Portal';
+  document.getElementById('mfa-code').value            = '';
+  document.getElementById('mfa-error').classList.add('hidden');
+}
+
+function showMFAStep() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('mfa-step').style.display   = 'flex';
+  document.getElementById('login-title').textContent  = 'Two-factor auth';
+  document.getElementById('login-sub').textContent    = `Signed in as ${_pendingMFAUser.username}`;
+  document.getElementById('mfa-code').focus();
+}
+
+/* ── Login submit ────────────────────────────────────────── */
+document.getElementById('login-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl    = document.getElementById('login-error');
+  const users    = loadUsers();
+  const user     = users.find(u => u.username === username && u.password === password);
+
+  if (user) {
+    errEl.classList.add('hidden');
+    if (user.mfaSecret) {
+      _pendingMFAUser = user;
+      showMFAStep();
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: user.username, role: user.role }));
+      doLogin(user);
+    }
+  } else {
+    errEl.textContent = 'Invalid username or password.';
+    errEl.classList.remove('hidden');
+    document.getElementById('login-password').value = '';
+  }
+});
+
+/* ── MFA verify on login ─────────────────────────────────── */
+function verifyMFALogin() {
+  const code  = document.getElementById('mfa-code').value.trim();
+  const errEl = document.getElementById('mfa-error');
+  if (!verifyTOTP(_pendingMFAUser.mfaSecret, code)) {
+    errEl.textContent = 'Invalid code. Please try again.';
+    errEl.classList.remove('hidden');
+    document.getElementById('mfa-code').value = '';
+    document.getElementById('mfa-code').focus();
+    return;
+  }
+  const user = _pendingMFAUser;
+  _pendingMFAUser = null;
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: user.username, role: user.role }));
+  showLoginForm();
+  doLogin(user);
+}
+
+document.getElementById('mfa-verify-btn').addEventListener('click', verifyMFALogin);
+document.getElementById('mfa-code').addEventListener('keydown', e => { if (e.key === 'Enter') verifyMFALogin(); });
+document.getElementById('mfa-back-btn').addEventListener('click', () => { _pendingMFAUser = null; showLoginForm(); });
+
+document.getElementById('logout-btn').addEventListener('click', doLogout);
+
+document.getElementById('clear-data-btn').addEventListener('click', async () => {
+  if (!confirm('Clear all imported data (Bark & MVF)? This cannot be undone.')) return;
+  clearFromLocal('bark');
+  clearFromLocal('mvf');
+  barkData = [];
+  mvfData  = [];
+  update();
+});
+
+/* ── User modal ─────────────────────────────────────────── */
+function openUserModal() {
+  renderUserList();
+  document.getElementById('user-modal').style.display = 'flex';
+}
+function closeUserModal_users() {
+  document.getElementById('user-modal').style.display = 'none';
+}
+
+function renderUserList() {
+  const users = loadUsers();
+  const list  = document.getElementById('user-list');
+  list.innerHTML = users.map((u, i) => `
+    <div class="user-row">
+      <div class="user-row-info">
+        <span class="user-row-name">${u.username}</span>
+        <span class="role-badge role-${u.role}">${u.role}</span>
+        ${u.mfaSecret ? '<span class="mfa-badge">2FA</span>' : ''}
+      </div>
+      <div class="user-row-actions">
+        <button class="mfa-toggle-btn ${u.mfaSecret ? 'disable' : 'enable'}" data-username="${u.username}">
+          ${u.mfaSecret ? 'Disable 2FA' : 'Enable 2FA'}
+        </button>
+        ${u.username === currentUser.username
+          ? '<span class="user-self-tag">You</span>'
+          : `<button class="user-delete-btn" data-index="${i}">Delete</button>`}
+      </div>
+    </div>`).join('');
+
+  list.querySelectorAll('.user-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const all = loadUsers();
+      all.splice(parseInt(btn.dataset.index), 1);
+      saveUsers(all);
+      renderUserList();
+    });
+  });
+
+  list.querySelectorAll('.mfa-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => openMFASetup(btn.dataset.username));
+  });
+}
+
+document.getElementById('manage-users-btn').addEventListener('click', openUserModal);
+document.getElementById('user-modal-close').addEventListener('click', closeUserModal_users);
+document.getElementById('user-backdrop').addEventListener('click', closeUserModal_users);
+
+document.getElementById('add-user-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value;
+  const role     = document.getElementById('new-role').value;
+  const errEl    = document.getElementById('add-user-error');
+
+  if (!username || !password) {
+    errEl.textContent = 'Username and password are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const users = loadUsers();
+  if (users.find(u => u.username === username)) {
+    errEl.textContent = 'Username already exists.';
+    errEl.style.display = 'block';
+    return;
+  }
+  users.push({ username, password, role, mfaSecret: null });
+  saveUsers(users);
+  errEl.style.display = 'none';
+  document.getElementById('new-username').value = '';
+  document.getElementById('new-password').value = '';
+  document.getElementById('new-role').value = 'user';
+  renderUserList();
+});
+
+/* ── MFA setup modal ─────────────────────────────────────── */
+function openMFASetup(username) {
+  const users = loadUsers();
+  const user  = users.find(u => u.username === username);
+  _mfaSetupState = null;
+  document.getElementById('mfa-setup-modal').style.display = 'flex';
+  document.getElementById('mfa-setup-title').textContent = `2FA — ${username}`;
+
+  if (user.mfaSecret) {
+    renderMFADisable(username);
+  } else {
+    const secret = generateTOTPSecret();
+    _mfaSetupState = { username, secret };
+    renderMFAEnable(username, secret);
+  }
+}
+
+function closeMFASetup() {
+  document.getElementById('mfa-setup-modal').style.display = 'none';
+  _mfaSetupState = null;
+}
+
+function renderMFAEnable(username, secret) {
+  const body = document.getElementById('mfa-setup-body');
+  body.innerHTML = `
+    <div class="mfa-setup-steps">
+      <div class="mfa-setup-step">
+        <span class="mfa-step-num">Step 1 — Scan QR code</span>
+        <p class="mfa-step-text">Open <strong>Google Authenticator</strong> or <strong>Authy</strong> and scan this code.</p>
+        <div class="mfa-qr-box"><div id="mfa-qr-div"></div></div>
+      </div>
+      <div class="mfa-setup-step">
+        <span class="mfa-step-num">Step 2 — Manual entry (alternative)</span>
+        <p class="mfa-step-text">Or enter this key manually in your app:</p>
+        <div class="mfa-secret-code">${secret.match(/.{1,4}/g).join(' ')}</div>
+      </div>
+      <div class="mfa-setup-step">
+        <span class="mfa-step-num">Step 3 — Verify</span>
+        <p class="mfa-step-text">Enter the 6-digit code from your app to confirm setup.</p>
+        <div class="mfa-verify-row">
+          <input type="text" id="mfa-setup-code" class="add-user-input" placeholder="000 000" maxlength="6" inputmode="numeric" autocomplete="off">
+          <button type="button" class="add-user-btn" id="mfa-confirm-btn">Confirm</button>
+        </div>
+        <div class="mfa-setup-error" id="mfa-setup-error"></div>
+      </div>
+    </div>`;
+
+  try {
+    new QRCode(document.getElementById('mfa-qr-div'), {
+      text:         getTOTPUri(secret, username),
+      width:        180,
+      height:       180,
+      colorDark:    '#000000',
+      colorLight:   '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  } catch (err) { console.error('QR render failed:', err); }
+
+  document.getElementById('mfa-confirm-btn').addEventListener('click', confirmMFAEnable);
+  document.getElementById('mfa-setup-code').addEventListener('keydown', e => { if (e.key === 'Enter') confirmMFAEnable(); });
+}
+
+function confirmMFAEnable() {
+  if (!_mfaSetupState) return;
+  const code   = document.getElementById('mfa-setup-code').value.trim();
+  const errEl  = document.getElementById('mfa-setup-error');
+  if (!verifyTOTP(_mfaSetupState.secret, code)) {
+    errEl.textContent = 'Code is incorrect — check your authenticator app and try again.';
+    errEl.style.display = 'block';
+    document.getElementById('mfa-setup-code').value = '';
+    return;
+  }
+  const users = loadUsers();
+  const user  = users.find(u => u.username === _mfaSetupState.username);
+  if (user) { user.mfaSecret = _mfaSetupState.secret; saveUsers(users); }
+  _mfaSetupState = null;
+  closeMFASetup();
+  renderUserList();
+}
+
+function renderMFADisable(username) {
+  const body = document.getElementById('mfa-setup-body');
+  body.innerHTML = `
+    <div class="mfa-disable-box">
+      <div class="mfa-enabled-badge">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        Two-factor authentication is enabled
+      </div>
+      <p class="mfa-step-text" style="color:var(--text-muted);font-size:13px">
+        Enter the current 6-digit code from your authenticator app to disable 2FA.
+      </p>
+      <div class="mfa-verify-row">
+        <input type="text" id="mfa-disable-code" class="add-user-input" placeholder="000 000" maxlength="6" inputmode="numeric" autocomplete="off">
+        <button type="button" class="add-user-btn" id="mfa-disable-btn" style="background:var(--red)">Disable 2FA</button>
+      </div>
+      <div class="mfa-setup-error" id="mfa-setup-error"></div>
+    </div>`;
+
+  const doDisable = () => {
+    const code  = document.getElementById('mfa-disable-code').value.trim();
+    const errEl = document.getElementById('mfa-setup-error');
+    const users = loadUsers();
+    const user  = users.find(u => u.username === username);
+    if (!user || !verifyTOTP(user.mfaSecret, code)) {
+      errEl.textContent = 'Invalid code. Please try again.';
+      errEl.style.display = 'block';
+      document.getElementById('mfa-disable-code').value = '';
+      return;
+    }
+    user.mfaSecret = null;
+    saveUsers(users);
+    closeMFASetup();
+    renderUserList();
+  };
+  document.getElementById('mfa-disable-btn').addEventListener('click', doDisable);
+  document.getElementById('mfa-disable-code').addEventListener('keydown', e => { if (e.key === 'Enter') doDisable(); });
+}
+
+document.getElementById('mfa-setup-close').addEventListener('click', closeMFASetup);
+document.getElementById('mfa-setup-backdrop').addEventListener('click', closeMFASetup);
+
+/* ── Init ───────────────────────────────────────────────── */
+const _savedSession = sessionStorage.getItem(SESSION_KEY);
+if (_savedSession) {
+  try { doLogin(JSON.parse(_savedSession)); }
+  catch { sessionStorage.removeItem(SESSION_KEY); }
+}
+// else: login screen stays visible, update() called after successful login
