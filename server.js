@@ -196,6 +196,14 @@ app.get('/api/gads/campaigns', async (req, res) => {
   }
 });
 
+/* ── Serve config.js from env vars (for hosted deployments) ── */
+app.get('/config.js', (req, res) => {
+  const accountId   = process.env.FB_ACCOUNT_ID   || '';
+  const accessToken = process.env.FB_ACCESS_TOKEN  || '';
+  res.type('application/javascript');
+  res.send(`const FB_CONFIG = { accountId: '${accountId}', accessToken: '${accessToken}' };`);
+});
+
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
