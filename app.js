@@ -1,3 +1,4 @@
+
 /* ── Seeded PRNG (consistent data across reloads) ───────── */
 function makePRNG(seed) {
   let s = seed;

@@ -28,6 +28,7 @@
   --radius-sm:     8px;
 }
 
+
 /* ── Login Screen ──────────────────────────────────────── */
 .login-screen {
   position: fixed;
@@ -234,7 +235,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; color: 
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  margin-bottom: 8px;
 }
 
 .nav-item {
@@ -261,6 +262,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; color: 
 }
 .nav-item:hover .nav-icon,
 .nav-item.active .nav-icon { opacity: 1; }
+
+.sidebar-bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+}
 
 .sidebar-footer {
   display: flex;
@@ -339,6 +346,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; color: 
   transition: border-color .15s;
 }
 .brand-select:hover, .brand-select:focus { border-color: var(--accent); }
+
 .import-csv-btn {
   background: var(--surface-2);
   border: 1px solid var(--border);
