@@ -1,8 +1,8 @@
-require('dotenv').config();
-const express = require('express');
-const fetch   = require('node-fetch');
 const path    = require('path');
 const fs      = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const express = require('express');
+const fetch   = require('node-fetch');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -193,6 +193,254 @@ app.get('/api/gads/campaigns', async (req, res) => {
   } catch (err) {
     console.error('[GAdS campaigns]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/* ── Google Analytics 4 ─────────────────────────────────── */
+const GA_PROPERTY_IDS = (process.env.GA_PROPERTY_IDS || process.env.GA_PROPERTY_ID || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const GA_BASE = 'https://analyticsdata.googleapis.com/v1beta';
+
+const gaOauth = {
+  clientId:     process.env.GADS_CLIENT_ID,
+  clientSecret: process.env.GADS_CLIENT_SECRET,
+  refreshToken: process.env.GA_REFRESH_TOKEN || process.env.GADS_REFRESH_TOKEN,
+};
+
+let _gaAccessToken = null;
+let _gaTokenExpiry  = 0;
+
+async function getGAAccessToken() {
+  if (_gaAccessToken && Date.now() < _gaTokenExpiry - 60_000) return _gaAccessToken;
+  const res  = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id:     gaOauth.clientId,
+      client_secret: gaOauth.clientSecret,
+      refresh_token: gaOauth.refreshToken,
+      grant_type:    'refresh_token',
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(`OAuth GA: ${data.error_description || data.error}`);
+  _gaAccessToken = data.access_token;
+  _gaTokenExpiry  = Date.now() + data.expires_in * 1000;
+  return _gaAccessToken;
+}
+
+function gaDateRange({ days, dateFrom, dateTo }) {
+  if (dateFrom && dateTo) return { startDate: dateFrom, endDate: dateTo };
+  const presets = { 7: '7daysAgo', 30: '30daysAgo', 90: '90daysAgo' };
+  return { startDate: presets[days] || '30daysAgo', endDate: 'today' };
+}
+
+async function gaRunReport(body, token, propertyId) {
+  if (!propertyId) throw new Error('GA property ID not specified');
+  const res  = await fetch(`${GA_BASE}/properties/${propertyId}:runReport`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(`[${propertyId}] ${data.error.message}`);
+  return data;
+}
+
+async function gaFetchOneProperty(propertyId, dateRange, token) {
+  const [dailyData, chanData] = await Promise.all([
+    gaRunReport({
+      dimensions:  [{ name: 'date' }],
+      metrics: [
+        { name: 'sessions' },
+        { name: 'totalUsers' },
+        { name: 'screenPageViews' },
+        { name: 'bounceRate' },
+        { name: 'averageSessionDuration' },
+        { name: 'conversions' },
+      ],
+      dateRanges: [dateRange],
+      orderBys:   [{ dimension: { dimensionName: 'date' } }],
+    }, token, propertyId),
+    gaRunReport({
+      dimensions:  [{ name: 'sessionDefaultChannelGroup' }],
+      metrics:     [{ name: 'sessions' }],
+      dateRanges:  [dateRange],
+      orderBys:    [{ metric: { metricName: 'sessions' }, desc: true }],
+    }, token, propertyId),
+  ]);
+  return { dailyData, chanData };
+}
+
+function mergeGAResults(results) {
+  const byDate   = {};
+  const channels = {};
+
+  for (const { dailyData, chanData } of results) {
+    for (const r of (dailyData.rows || [])) {
+      const raw     = r.dimensionValues[0].value;
+      const dateStr = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+      if (!byDate[dateStr]) byDate[dateStr] = { dateStr, ga_sessions: 0, ga_users: 0, ga_pageviews: 0, _bounceSum: 0, _bounceN: 0, _durSum: 0, ga_goals: 0 };
+      byDate[dateStr].ga_sessions  += parseInt(r.metricValues[0].value  || 0);
+      byDate[dateStr].ga_users     += parseInt(r.metricValues[1].value  || 0);
+      byDate[dateStr].ga_pageviews += parseInt(r.metricValues[2].value  || 0);
+      byDate[dateStr]._bounceSum   += parseFloat(r.metricValues[3].value || 0) * 100;
+      byDate[dateStr]._bounceN     += 1;
+      byDate[dateStr]._durSum      += parseFloat(r.metricValues[4].value || 0);
+      byDate[dateStr].ga_goals     += parseFloat(r.metricValues[5].value || 0);
+    }
+    for (const r of (chanData.rows || [])) {
+      const key = r.dimensionValues[0].value.toLowerCase();
+      channels[key] = (channels[key] || 0) + parseInt(r.metricValues[0].value || 0);
+    }
+  }
+
+  const daily = Object.values(byDate).map(d => ({
+    dateStr:      d.dateStr,
+    ga_sessions:  d.ga_sessions,
+    ga_users:     d.ga_users,
+    ga_pageviews: d.ga_pageviews,
+    ga_bounce:    d._bounceN > 0 ? d._bounceSum / d._bounceN : 0,
+    ga_duration:  d._bounceN > 0 ? d._durSum    / d._bounceN : 0,
+    ga_goals:     d.ga_goals,
+  })).sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+
+  return { daily, channels };
+}
+
+app.get('/api/ga/daily', async (req, res) => {
+  try {
+    const { days = '30', dateFrom, dateTo, propertyId } = req.query;
+    if (GA_PROPERTY_IDS.length === 0) return res.status(400).json({ error: 'GA_PROPERTY_IDS not configured' });
+    const token     = await getGAAccessToken();
+    const dateRange = gaDateRange({ days: parseInt(days), dateFrom: dateFrom || null, dateTo: dateTo || null });
+
+    const ids = propertyId && GA_PROPERTY_IDS.includes(propertyId) ? [propertyId] : GA_PROPERTY_IDS;
+    const results = await Promise.all(
+      ids.map(id => gaFetchOneProperty(id, dateRange, token).catch(e => { console.error('[GA]', e.message); return null; }))
+    );
+
+    res.json(mergeGAResults(results.filter(Boolean)));
+  } catch (err) {
+    console.error('[GA daily]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ga/pages', async (req, res) => {
+  try {
+    const { days = '30', dateFrom, dateTo, propertyId } = req.query;
+    if (GA_PROPERTY_IDS.length === 0) return res.status(400).json({ error: 'GA_PROPERTY_IDS not configured' });
+    const token     = await getGAAccessToken();
+    const dateRange = gaDateRange({ days: parseInt(days), dateFrom: dateFrom || null, dateTo: dateTo || null });
+
+    const ids = propertyId && GA_PROPERTY_IDS.includes(propertyId) ? [propertyId] : GA_PROPERTY_IDS;
+    const allData = await Promise.all(
+      ids.map(id => gaRunReport({
+        dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
+        metrics: [
+          { name: 'screenPageViews' },
+          { name: 'sessions' },
+          { name: 'bounceRate' },
+          { name: 'averageSessionDuration' },
+        ],
+        dateRanges: [dateRange],
+        orderBys:   [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+        limit: 25,
+      }, token, id).catch(e => { console.error('[GA pages]', e.message); return null; }))
+    );
+
+    const byPath = {};
+    for (const data of allData.filter(Boolean)) {
+      for (const r of (data.rows || [])) {
+        const page = r.dimensionValues[0].value;
+        if (!byPath[page]) byPath[page] = { page, title: r.dimensionValues[1].value, pv: 0, sessions: 0, _bounceSum: 0, _bounceN: 0, _durSum: 0 };
+        byPath[page].pv         += parseInt(r.metricValues[0].value  || 0);
+        byPath[page].sessions   += parseInt(r.metricValues[1].value  || 0);
+        byPath[page]._bounceSum += parseFloat(r.metricValues[2].value || 0) * 100;
+        byPath[page]._bounceN   += 1;
+        byPath[page]._durSum    += parseFloat(r.metricValues[3].value || 0);
+      }
+    }
+
+    const pages = Object.values(byPath)
+      .sort((a, b) => b.pv - a.pv)
+      .slice(0, 25)
+      .map(p => {
+        const dur = p._bounceN > 0 ? p._durSum / p._bounceN : 0;
+        const m   = Math.floor(dur / 60);
+        const sc  = Math.round(dur % 60);
+        return {
+          page:     p.page,
+          title:    p.title,
+          pv:       p.pv,
+          sessions: p.sessions,
+          bounce:   (p._bounceN > 0 ? p._bounceSum / p._bounceN : 0).toFixed(1) + '%',
+          dur:      `${m}m ${sc < 10 ? '0' + sc : sc}s`,
+        };
+      });
+
+    res.json(pages);
+  } catch (err) {
+    console.error('[GA pages]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ── GA OAuth setup flow ─────────────────────────────────── */
+const GA_OAUTH_REDIRECT = `http://localhost:${process.env.PORT || 3000}/auth/ga/callback`;
+const GA_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
+
+app.get('/auth/ga', (req, res) => {
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id',     gaOauth.clientId);
+  url.searchParams.set('redirect_uri',  GA_OAUTH_REDIRECT);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope',         GA_SCOPE);
+  url.searchParams.set('access_type',   'offline');
+  url.searchParams.set('prompt',        'consent');
+  res.redirect(url.toString());
+});
+
+app.get('/auth/ga/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error) return res.send(`<h2>Auth error: ${error}</h2>`);
+  try {
+    const resp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id:     gaOauth.clientId,
+        client_secret: gaOauth.clientSecret,
+        redirect_uri:  GA_OAUTH_REDIRECT,
+        grant_type:    'authorization_code',
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) return res.send(`<h2>Token error: ${data.error_description || data.error}</h2>`);
+
+    /* Save refresh token to .env */
+    const envPath = path.join(__dirname, '.env');
+    let envContent = fs.readFileSync(envPath, 'utf8');
+    if (envContent.includes('GA_REFRESH_TOKEN=')) {
+      envContent = envContent.replace(/GA_REFRESH_TOKEN=.*/,  `GA_REFRESH_TOKEN=${data.refresh_token}`);
+    } else {
+      envContent += `\nGA_REFRESH_TOKEN=${data.refresh_token}`;
+    }
+    fs.writeFileSync(envPath, envContent);
+
+    /* Update in-memory so server works immediately without restart */
+    gaOauth.refreshToken = data.refresh_token;
+    _gaAccessToken = data.access_token;
+    _gaTokenExpiry  = Date.now() + (data.expires_in || 3600) * 1000;
+
+    res.send(`<h2 style="font-family:sans-serif;color:green">✓ Google Analytics connected!</h2><p>Refresh token saved. You can close this tab.</p>`);
+  } catch (err) {
+    res.send(`<h2>Error: ${err.message}</h2>`);
   }
 });
 

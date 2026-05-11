@@ -57,8 +57,12 @@ const daily = Array.from({ length: TOTAL }, (_, i) => {
     gads_spend:       gadsSpend,
     gads_conversions: gadsConv,
     revenue:          (fbConv + gadsConv) * rand(28, 62),
-    email_sent:       rand(2000, 9000),
-    email_opened:     rand(380, 2200),
+    email_sent:        rand(2000, 9000),
+    email_opened:      rand(380, 2200),
+    email_clicked:     rand(80,  620),
+    email_bounced:     rand(20,  180),
+    email_conversions: rand(8,   60),
+    email_unsub:       rand(2,   30),
   };
 });
 
@@ -84,11 +88,12 @@ const topPages = [
   { page: '/checkout',      sessions:  840, pv: 1920, bounce: '18.9%', dur: '5m 44s' },
 ];
 
+
 /* ── State ──────────────────────────────────────────────── */
 const GADS_BRANDS = [
-  { id: '7066096988', name: 'NEXGEN',                 donutLabel: 'Nexgen Google Ads' },
-  { id: '4721419174', name: 'Business Telecom',        donutLabel: 'BTEL Google Ads'   },
-  { id: '9197029288', name: 'Compare Business Phones', donutLabel: 'CBP Google Ads'    },
+  { id: '7066096988', name: 'NEXGEN',                 donutLabel: 'Nexgen Google Ads', gaPropertyId: '351878495'  },
+  { id: '4721419174', name: 'Business Telecom',        donutLabel: 'BTEL Google Ads',   gaPropertyId: '350928719'  },
+  { id: '9197029288', name: 'Compare Business Phones', donutLabel: 'CBP Google Ads',    gaPropertyId: '437764581'  },
 ];
 
 let barkData              = [];
@@ -105,6 +110,10 @@ let fbApiCampaigns   = [];
 let gadsApiDaily     = [];
 let gadsApiCampaigns = [];
 let gadsBrand        = GADS_BRANDS[0].id;
+let gaApiDaily       = [];
+let gaApiPages       = [];
+let gaApiChannels    = {};
+let overviewGaDaily  = [];
 
 /* ── Helpers ────────────────────────────────────────────── */
 const sum  = (arr, k) => arr.reduce((a, d) => a + d[k], 0);
@@ -240,6 +249,25 @@ function buildKPIs(s) {
       { label: 'Revenue',        value: rev > 0 ? fmt$(rev) : '—',              pct: randChange(3, 20), up: true  },
       { label: 'ROAS',           value: roas ? roas.toFixed(2) + 'x' : '—',    pct: randChange(2, 15), up: true  },
       { label: 'Days Imported',  value: fmtN(s.length),                         pct: 0,                 up: true  },
+    ];
+  }
+
+  if (platform === 'email') {
+    const sent   = sum(s, 'email_sent');
+    const opened = sum(s, 'email_opened');
+    const clicked= sum(s, 'email_clicked');
+    const conv   = sum(s, 'email_conversions');
+    const bounced= sum(s, 'email_bounced');
+    const unsub  = sum(s, 'email_unsub');
+    const openRate  = sent   > 0 ? (opened  / sent)   * 100 : 0;
+    const clickRate = opened > 0 ? (clicked / opened) * 100 : 0;
+    return [
+      { label: 'Emails Sent',  value: fmtN(sent),       pct: randChange(3, 18), up: true  },
+      { label: 'Open Rate',    value: fmtPct(openRate), pct: randChange(1, 10), up: true  },
+      { label: 'Click Rate',   value: fmtPct(clickRate),pct: randChange(1,  8), up: true  },
+      { label: 'Conversions',  value: fmtN(conv),       pct: randChange(4, 22), up: true  },
+      { label: 'Bounces',      value: fmtN(bounced),    pct: randChange(1,  8), up: false },
+      { label: 'Unsubscribes', value: fmtN(unsub),      pct: randChange(1,  6), up: false },
     ];
   }
 
@@ -448,12 +476,22 @@ function getChartConfigs(s) {
 
   if (platform === 'ga') {
     const sessions = s.map(d => d.ga_sessions);
-    const organic  = sum(s, 'ga_organic');
-    const direct   = sum(s, 'ga_direct');
-    const referral = sum(s, 'ga_referral');
-    const social   = sum(s, 'ga_social');
-    const email    = sum(s, 'ga_email');
     const bounce   = s.map(d => d.ga_bounce);
+    const hasRealChannels = Object.keys(gaApiChannels).length > 0;
+    let organic, direct, referral, social, email;
+    if (hasRealChannels) {
+      organic  = gaApiChannels['organic search']  || 0;
+      direct   = gaApiChannels['direct']           || 0;
+      referral = gaApiChannels['referral']         || 0;
+      social   = (gaApiChannels['organic social']  || 0) + (gaApiChannels['paid social'] || 0);
+      email    = gaApiChannels['email']            || 0;
+    } else {
+      organic  = sum(s, 'ga_organic');
+      direct   = sum(s, 'ga_direct');
+      referral = sum(s, 'ga_referral');
+      social   = sum(s, 'ga_social');
+      email    = sum(s, 'ga_email');
+    }
 
     return {
       mainTitle:  'Sessions Over Time',
@@ -533,6 +571,115 @@ function getChartConfigs(s) {
             data: bounce,
             borderColor: '#f43f5e',
             backgroundColor: makeGradient(ctx, '#f43f5e', .15),
+            fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ ticks: { callback: v => v + '%', color: TICK_COLOR } }) },
+          },
+        },
+      }),
+    };
+  }
+
+  if (platform === 'email') {
+    const sent    = s.map(d => d.email_sent);
+    const opened  = s.map(d => d.email_opened);
+    const clicked = s.map(d => d.email_clicked);
+    const openRates = s.map(d => d.email_sent > 0 ? parseFloat(((d.email_opened / d.email_sent) * 100).toFixed(1)) : 0);
+    const totSent   = sum(s, 'email_sent');
+    const totOpened = sum(s, 'email_opened');
+    const totClicked= sum(s, 'email_clicked');
+    const totConv   = sum(s, 'email_conversions');
+
+    return {
+      mainTitle:  'Sends & Opens',
+      mainSub:    'Daily email performance',
+      donutTitle: 'Engagement Breakdown',
+      barTitle:   'Daily Clicks',
+      lineTitle:  'Open Rate Trend',
+
+      main: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Sent',
+              data: sent,
+              borderColor: '#a855f7',
+              backgroundColor: makeGradient(ctx, '#a855f7', .18),
+              fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+              yAxisID: 'y',
+            },
+            {
+              label: 'Opened',
+              data: opened,
+              borderColor: '#10b981',
+              backgroundColor: 'transparent',
+              fill: false, tension: .4, borderWidth: 2, borderDash: [4, 3], pointRadius: 0, pointHoverRadius: 4,
+              yAxisID: 'y',
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { labels: { color: '#64748b', boxWidth: 12, font: { size: 11 } } } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ ticks: { callback: v => fmtN(v), color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      donut: () => ({
+        type: 'doughnut',
+        data: {
+          labels: ['Opened', 'Clicked', 'Converted', 'No Engagement'],
+          datasets: [{ data: [totOpened, totClicked, totConv, Math.max(0, totSent - totOpened)], backgroundColor: ['#10b981','#a855f7','#f59e0b','#1e2d45'], borderWidth: 0, hoverOffset: 4 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '72%',
+          plugins: { legend: { display: false } },
+        },
+        legendItems: [
+          { label: 'Opened',        color: '#10b981', value: fmtN(totOpened)  },
+          { label: 'Clicked',       color: '#a855f7', value: fmtN(totClicked) },
+          { label: 'Converted',     color: '#f59e0b', value: fmtN(totConv)    },
+          { label: 'No Engagement', color: '#1e2d45', value: fmtN(Math.max(0, totSent - totOpened)) },
+        ],
+      }),
+
+      bar: () => ({
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{ label: 'Clicks', data: clicked, backgroundColor: 'rgba(168,85,247,.65)', borderRadius: 3 }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...baseScaleX(labels) },
+            y: { ...baseScaleY({ ticks: { callback: v => fmtN(v), color: TICK_COLOR } }) },
+          },
+        },
+      }),
+
+      line: (ctx) => ({
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Open Rate %',
+            data: openRates,
+            borderColor: '#a855f7',
+            backgroundColor: makeGradient(ctx, '#a855f7', .15),
             fill: true, tension: .4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
           }],
         },
@@ -995,11 +1142,46 @@ function renderTable() {
   const body = document.getElementById('table-body');
   const badge = document.getElementById('table-badge');
 
+  if (platform === 'email') {
+    const allCampaigns = [...customEmailCampaigns];
+    document.getElementById('table-title').textContent = 'Campaign Performance';
+    badge.textContent = allCampaigns.length + ' campaigns';
+    head.innerHTML = '<tr>' + ['Campaign','Type','Sent','Opens','Open Rate','Clicks','CTR','Conversions','Unsub','Status',''].map(h => `<th>${h}</th>`).join('') + '</tr>';
+    body.innerHTML = allCampaigns.map(c => {
+      const openRate  = c.sent   > 0 ? fmtPct((c.opens  / c.sent)   * 100) : '—';
+      const ctr       = c.opens  > 0 ? fmtPct((c.clicks / c.opens)  * 100) : '—';
+      const stClass   = c.status === 'active' || c.status === 'scheduled' ? 'active' : c.status === 'sent' ? 'paused' : 'paused';
+      const stLabel   = c.status === 'draft' ? 'draft' : c.status === 'scheduled' ? 'scheduled' : c.status === 'sent' ? 'sent' : c.status;
+      const stBadge   = `<span class="status-badge status-${stClass}"><span class="status-dot-sm"></span>${stLabel}</span>`;
+      const typeBadge = `<span class="email-type-badge type-${c.type.toLowerCase().replace(/\s+/g,'-')}">${c.type}</span>`;
+      const actions   = `<div class="edm-actions">
+        <button class="edm-action-btn edit" onclick="openEDMModal('${c.id}')">Edit</button>
+        <button class="edm-action-btn dup"  onclick="duplicateEDM('${c.id}')">Dup</button>
+        <button class="edm-action-btn delete" onclick="deleteEDM('${c.id}')">Delete</button>
+      </div>`;
+      return `<tr>
+        <td><div style="display:flex;flex-direction:column;gap:2px"><span>${c.name}</span>${c.subject ? `<span style="font-size:11px;color:#64748b">${c.subject}</span>` : ''}</div></td>
+        <td>${typeBadge}</td>
+        <td>${fmtN(c.sent)}</td>
+        <td>${fmtN(c.opens)}</td>
+        <td>${openRate}</td>
+        <td>${fmtN(c.clicks)}</td>
+        <td>${ctr}</td>
+        <td>${fmtN(c.conv)}</td>
+        <td>${fmtN(c.unsub)}</td>
+        <td>${stBadge}</td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join('');
+    return;
+  }
+
   if (platform === 'ga') {
+    const pages = gaApiPages.length > 0 ? gaApiPages : topPages;
     document.getElementById('table-title').textContent = 'Top Pages';
-    badge.textContent = topPages.length + ' pages';
+    badge.textContent = pages.length + ' pages';
     head.innerHTML = '<tr>' + ['Page','Sessions','Pageviews','Bounce Rate','Avg Duration'].map(h => `<th>${h}</th>`).join('') + '</tr>';
-    body.innerHTML = topPages.map(p => `
+    body.innerHTML = pages.map(p => `
       <tr>
         <td><code style="color:#94a3b8;font-size:12px">${p.page}</code></td>
         <td>${fmtN(p.sessions)}</td>
@@ -1013,19 +1195,24 @@ function renderTable() {
   if (platform === 'mvf') {
     document.getElementById('table-title').textContent = 'MVF — Imported Data';
     badge.textContent = mvfData.length + ' rows';
+    const hasUid = mvfData.some(d => d.uid != null);
+    const hasSize= mvfData.some(d => d.size);
     const hasCat = mvfData.some(d => d.category);
     const hasRev = mvfData.some(d => d.revenue > 0);
-    const cols   = ['Date','Spend','Leads','Cost / Lead', ...(hasRev ? ['Revenue'] : []), ...(hasCat ? ['Category'] : [])];
+    const cols   = ['Date', ...(hasUid ? ['UID Count'] : []), 'Spend', 'Leads', 'Cost / Lead',
+                    ...(hasRev ? ['Revenue'] : []), ...(hasSize ? ['Size'] : []), ...(hasCat ? ['Category'] : [])];
     head.innerHTML = '<tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
     body.innerHTML = mvfData.map(d => {
       const cpl = d.leads > 0 ? fmt$(d.spend / d.leads) : '&mdash;';
       return `<tr>
         <td>${d.label}</td>
+        ${hasUid ? `<td>${d.uid != null ? fmtN(d.uid) : '&mdash;'}</td>` : ''}
         <td>${fmt$(d.spend)}</td>
         <td>${fmtN(d.leads)}</td>
         <td>${cpl}</td>
-        ${hasRev ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
-        ${hasCat ? `<td>${d.category || '&mdash;'}</td>` : ''}
+        ${hasRev  ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
+        ${hasSize ? `<td>${d.size || '&mdash;'}</td>` : ''}
+        ${hasCat  ? `<td>${d.category || '&mdash;'}</td>` : ''}
       </tr>`;
     }).join('');
     return;
@@ -1034,19 +1221,24 @@ function renderTable() {
   if (platform === 'bark') {
     document.getElementById('table-title').textContent = 'Bark — Imported Data';
     badge.textContent = barkData.length + ' rows';
+    const hasUid = barkData.some(d => d.uid != null);
+    const hasSize= barkData.some(d => d.size);
     const hasCat = barkData.some(d => d.category);
     const hasRev = barkData.some(d => d.revenue > 0);
-    const cols   = ['Date','Spend','Leads','Cost / Lead', ...(hasRev ? ['Revenue'] : []), ...(hasCat ? ['Category'] : [])];
+    const cols   = ['Date', ...(hasUid ? ['UID Count'] : []), 'Spend', 'Leads', 'Cost / Lead',
+                    ...(hasRev ? ['Revenue'] : []), ...(hasSize ? ['Size'] : []), ...(hasCat ? ['Category'] : [])];
     head.innerHTML = '<tr>' + cols.map(h => `<th>${h}</th>`).join('') + '</tr>';
     body.innerHTML = barkData.map(d => {
       const cpl = d.leads > 0 ? fmt$(d.spend / d.leads) : '&mdash;';
       return `<tr>
         <td>${d.label}</td>
+        ${hasUid ? `<td>${d.uid != null ? fmtN(d.uid) : '&mdash;'}</td>` : ''}
         <td>${fmt$(d.spend)}</td>
         <td>${fmtN(d.leads)}</td>
         <td>${cpl}</td>
-        ${hasRev ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
-        ${hasCat ? `<td>${d.category || '&mdash;'}</td>` : ''}
+        ${hasRev  ? `<td>${d.revenue > 0 ? fmt$(d.revenue) : '&mdash;'}</td>` : ''}
+        ${hasSize ? `<td>${d.size || '&mdash;'}</td>` : ''}
+        ${hasCat  ? `<td>${d.category || '&mdash;'}</td>` : ''}
       </tr>`;
     }).join('');
     return;
@@ -1112,19 +1304,21 @@ function renderTable() {
 
 /* ── Page header ────────────────────────────────────────── */
 const PLATFORM_META = {
-  all:  { title: 'Overview',          sub: 'All platforms combined' },
-  ga:   { title: 'Google Analytics',  sub: 'Website traffic & behaviour' },
-  fb:   { title: 'Facebook Ads',      sub: 'Paid social performance' },
-  gads: { title: 'Google Ads',        sub: 'Search & display performance' },
-  bark: { title: 'Bark',              sub: 'Lead marketplace performance' },
-  mvf:  { title: 'MVF',              sub: 'MVF lead generation performance' },
+  all:   { title: 'Overview',           sub: 'All platforms combined' },
+  ga:    { title: 'Google Analytics',   sub: 'Website traffic & behaviour' },
+  fb:    { title: 'Facebook Ads',       sub: 'Paid social performance' },
+  gads:  { title: 'Google Ads',         sub: 'Search & display performance' },
+  bark:  { title: 'Bark',               sub: 'Lead marketplace performance' },
+  mvf:   { title: 'MVF',                sub: 'MVF lead generation performance' },
+  email: { title: 'Email Marketing',    sub: 'Campaign performance & engagement' },
 };
 
 function renderHeader() {
   const m = PLATFORM_META[platform];
   document.getElementById('page-title').textContent    = m.title;
   document.getElementById('page-subtitle').textContent = m.sub;
-  document.getElementById('brand-select').style.display = platform === 'gads' ? '' : 'none';
+  document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
+  document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
   document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf') ? '' : 'none';
   const importBtn = document.getElementById('bark-import-btn');
   if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
@@ -1133,33 +1327,34 @@ function renderHeader() {
 }
 
 /* ── Overview data builder ──────────────────────────────── */
-function buildOverviewData(gadsDaily, fbDaily) {
+function buildOverviewData(gadsDaily, fbDaily, gaDaily) {
   const byDate = {};
+  const blank = () => ({
+    gads_impressions: 0, gads_clicks: 0, gads_spend: 0, gads_conversions: 0, revenue: 0,
+    fb_impressions: 0, fb_reach: 0, fb_clicks: 0, fb_spend: 0, fb_conversions: 0,
+    ga_sessions: 0, email_sent: 0, email_opened: 0,
+  });
+
   for (const d of gadsDaily) {
     byDate[d.dateStr] = {
-      dateStr: d.dateStr, label: d.label,
+      dateStr: d.dateStr, label: d.label, ...blank(),
       gads_impressions: d.gads_impressions, gads_clicks: d.gads_clicks,
       gads_spend: d.gads_spend, gads_conversions: d.gads_conversions,
       revenue: d.revenue,
-      fb_impressions: 0, fb_reach: 0, fb_clicks: 0, fb_spend: 0, fb_conversions: 0,
-      ga_sessions: 0, email_sent: 0, email_opened: 0,
     };
   }
   for (const d of fbDaily) {
-    if (!byDate[d.dateStr]) {
-      byDate[d.dateStr] = {
-        dateStr: d.dateStr, label: d.label,
-        gads_impressions: 0, gads_clicks: 0, gads_spend: 0, gads_conversions: 0, revenue: 0,
-        fb_impressions: 0, fb_reach: 0, fb_clicks: 0, fb_spend: 0, fb_conversions: 0,
-        ga_sessions: 0, email_sent: 0, email_opened: 0,
-      };
-    }
+    if (!byDate[d.dateStr]) byDate[d.dateStr] = { dateStr: d.dateStr, label: d.label, ...blank() };
     byDate[d.dateStr].fb_impressions += d.fb_impressions;
     byDate[d.dateStr].fb_reach       += d.fb_reach;
     byDate[d.dateStr].fb_clicks      += d.fb_clicks;
     byDate[d.dateStr].fb_spend       += d.fb_spend;
     byDate[d.dateStr].fb_conversions += d.fb_conversions;
     byDate[d.dateStr].revenue        += d.revenue;
+  }
+  for (const d of (gaDaily || [])) {
+    if (!byDate[d.dateStr]) byDate[d.dateStr] = { dateStr: d.dateStr, label: d.label || d.dateStr, ...blank() };
+    byDate[d.dateStr].ga_sessions += d.ga_sessions;
   }
   return Object.values(byDate).sort((a, b) => a.dateStr.localeCompare(b.dateStr));
 }
@@ -1173,9 +1368,10 @@ async function update() {
   if (platform === 'all') {
     document.getElementById('loading-msg').textContent = 'Fetching all brands data…';
     showLoading(true);
-    const [gadsRes, fbRes] = await Promise.allSettled([
+    const [gadsRes, fbRes, gaRes] = await Promise.allSettled([
       Promise.all([fetchGAdsDailyInsights(dateOpts, null), fetchGAdsCampaigns(dateOpts, null)]),
       Promise.all([fetchFBDailyInsights(dateOpts), fetchFBCampaignInsights(dateOpts)]),
+      fetchGADailyInsights(dateOpts, null),
     ]);
     showLoading(false);
     const errs = [];
@@ -1183,6 +1379,8 @@ async function update() {
     else errs.push('GAdS: ' + gadsRes.reason.message);
     if (fbRes.status === 'fulfilled') [fbApiDaily, fbApiCampaigns] = fbRes.value;
     else errs.push('FB: ' + fbRes.reason.message);
+    if (gaRes.status === 'fulfilled') overviewGaDaily = gaRes.value.daily || [];
+    else errs.push('GA: ' + gaRes.reason.message);
     if (errs.length) showError(errs.join(' | '));
   }
 
@@ -1218,6 +1416,27 @@ async function update() {
     showLoading(false);
   }
 
+  if (platform === 'ga') {
+    const gaBrand     = GADS_BRANDS.find(b => b.id === gadsBrand);
+    const propertyId  = gaBrand ? gaBrand.gaPropertyId : null;
+    document.getElementById('loading-msg').textContent = 'Fetching Google Analytics data…';
+    showLoading(true);
+    try {
+      const [gaResult, gaPages] = await Promise.all([
+        fetchGADailyInsights(dateOpts, propertyId),
+        fetchGATopPages(dateOpts, propertyId),
+      ]);
+      gaApiDaily    = gaResult.daily    || [];
+      gaApiChannels = gaResult.channels || {};
+      gaApiPages    = gaPages;
+    } catch (err) {
+      showLoading(false);
+      showError('Google Analytics: ' + err.message);
+      return;
+    }
+    showLoading(false);
+  }
+
   renderHeader();
 
   const showUpload    = platform === 'bark' && barkData.length === 0;
@@ -1236,11 +1455,13 @@ async function update() {
 
   const s = platform === 'fb'   ? fbApiDaily
           : platform === 'gads' && gadsApiDaily.length > 0 ? gadsApiDaily
+          : platform === 'ga'   && gaApiDaily.length  > 0 ? gaApiDaily
           : platform === 'bark' ? barkData
           : platform === 'mvf'  ? mvfData
           : platform === 'all' && overviewGadsDaily.length > 0
-            ? buildOverviewData(overviewGadsDaily, fbApiDaily)
+            ? buildOverviewData(overviewGadsDaily, fbApiDaily, overviewGaDaily)
           : slice();
+  if (platform === 'email' && s.length === 0) { renderKPIs([]); renderCharts([]); renderTable(); return; }
   renderKPIs(s);
   renderCharts(s);
   renderTable();
@@ -1265,13 +1486,22 @@ const inputFrom   = document.getElementById('date-from');
 const inputTo     = document.getElementById('date-to');
 const applyBtn    = document.getElementById('date-apply');
 
-const today2yr  = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return toDateStr(d); })();
+const today2yr    = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return toDateStr(d); })();
+const _todayFull  = toDateStr(new Date());
+const _monthStart = _todayFull.slice(0, 8) + '01';   // YYYY-MM-01
+
+dateFrom = _monthStart;
+dateTo   = _todayFull;
+
 inputFrom.min   = today2yr;
-inputFrom.max   = daily[TOTAL - 1].dateStr;
-inputFrom.value = daily[TOTAL - 30].dateStr;
+inputFrom.max   = _todayFull;
+inputFrom.value = _monthStart;
 inputTo.min     = today2yr;
-inputTo.max     = daily[TOTAL - 1].dateStr;
-inputTo.value   = daily[TOTAL - 1].dateStr;
+inputTo.max     = _todayFull;
+inputTo.value   = _todayFull;
+
+const _fmtLabel = str => { const [y, m, d] = str.split('-'); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+customBtn.textContent = `${_fmtLabel(_monthStart)} – ${_fmtLabel(_todayFull)}`;
 
 customBtn.addEventListener('click', e => {
   e.stopPropagation();
@@ -1368,22 +1598,35 @@ function parseCSV(text) {
   const iLeads  = col('lead') >= 0 ? col('lead') : col('conversion') >= 0 ? col('conversion') : col('enquir');
   const iRev    = col('revenue') >= 0 ? col('revenue') : col('value') >= 0 ? col('value') : col('sale');
   const iCat    = col('category') >= 0 ? col('category') : col('type');
+  const iUid    = col('uid') >= 0 ? col('uid') : col('id');
+  const iSize   = col('size');
 
   if (iDate < 0)  throw new Error('No date column found. Add a "date" column.');
   if (iSpend < 0) throw new Error('No spend/cost column found. Add a "spend" column.');
 
-  const byDate = {};
+  const byDate  = {};
+  const uidSets = {};
   lines.slice(1).forEach(line => {
     const cells   = parseCSVLine(line);
     const dateStr = normalizeDateStr(cells[iDate]);
     if (!dateStr) return;
-    if (!byDate[dateStr]) byDate[dateStr] = { dateStr, spend: 0, leads: 0, revenue: 0, category: '' };
+    if (!byDate[dateStr]) {
+      byDate[dateStr] = { dateStr, spend: 0, leads: 0, revenue: 0, category: '', size: '' };
+      uidSets[dateStr] = new Set();
+    }
     byDate[dateStr].spend   += parseFloat((cells[iSpend]  || '0').replace(/[$,]/g, '')) || 0;
     if (iLeads >= 0) byDate[dateStr].leads += parseInt(cells[iLeads] || 0) || 0;
     else             byDate[dateStr].leads += 1; // no leads column — each row = 1 lead
-    if (iRev   >= 0) byDate[dateStr].revenue += parseFloat((cells[iRev] || '0').replace(/[$,]/g, '')) || 0;
-    if (iCat   >= 0 && cells[iCat]) byDate[dateStr].category = cells[iCat];
+    if (iRev   >= 0) byDate[dateStr].revenue  += parseFloat((cells[iRev]  || '0').replace(/[$,]/g, '')) || 0;
+    if (iCat   >= 0 && cells[iCat]?.trim())  byDate[dateStr].category = cells[iCat].trim();
+    if (iSize  >= 0 && cells[iSize]?.trim()) byDate[dateStr].size     = cells[iSize].trim();
+    if (iUid   >= 0 && cells[iUid]?.trim())  uidSets[dateStr].add(cells[iUid].trim());
   });
+
+  // Store unique UID count per date
+  for (const d of Object.keys(byDate)) {
+    byDate[d].uid = uidSets[d].size > 0 ? uidSets[d].size : null;
+  }
 
   return Object.values(byDate)
     .map(d => {
@@ -1449,8 +1692,8 @@ function openUploadModal(p) {
   _uploadColor = p === 'bark' ? '#06b6d4' : '#f97316';
   const name   = p === 'bark' ? 'Bark' : 'MVF';
   const samples = {
-    bark: ['date,spend,leads,revenue,category','01/05/2025,250.00,5,4500.00,Phone Systems','02/05/2025,180.00,3,2700.00,VoIP','03/05/2025,310.00,7,6300.00,Phone Systems','04/05/2025,95.00,2,1800.00,Phone Systems','05/05/2025,220.00,4,3600.00,VoIP'].join('\n'),
-    mvf:  ['date,spend,leads,revenue,category','01/05/2025,320.00,8,7200.00,Business Phones','02/05/2025,210.00,5,4500.00,VoIP','03/05/2025,450.00,11,9900.00,Business Phones','04/05/2025,130.00,3,2700.00,Broadband','05/05/2025,280.00,7,6300.00,Business Phones'].join('\n'),
+    bark: ['date,uid,size,spend,leads,revenue,category','01/05/2025,BK-001,Small,250.00,5,4500.00,Phone Systems','02/05/2025,BK-002,Medium,180.00,3,2700.00,VoIP','03/05/2025,BK-003,Large,310.00,7,6300.00,Phone Systems','04/05/2025,BK-004,Small,95.00,2,1800.00,Phone Systems','05/05/2025,BK-005,Medium,220.00,4,3600.00,VoIP'].join('\n'),
+    mvf:  ['date,uid,size,spend,leads,revenue,category','01/05/2025,MV-001,Medium,320.00,8,7200.00,Business Phones','02/05/2025,MV-002,Small,210.00,5,4500.00,VoIP','03/05/2025,MV-003,Large,450.00,11,9900.00,Business Phones','04/05/2025,MV-004,Small,130.00,3,2700.00,Broadband','05/05/2025,MV-005,Medium,280.00,7,6300.00,Business Phones'].join('\n'),
   };
   document.getElementById('upload-modal-title').textContent = `Import ${name} CSV`;
   document.getElementById('upload-drop-title').textContent  = `Import your ${name} CSV`;
@@ -1503,11 +1746,189 @@ document.getElementById('upload-sample-btn').addEventListener('click', e => {
 document.getElementById('upload-modal-close').addEventListener('click', closeUploadModal);
 document.getElementById('upload-backdrop').addEventListener('click', closeUploadModal);
 document.getElementById('import-csv-btn').addEventListener('click', () => {
-  if (platform === 'bark') { barkData = []; clearFromLocal('bark'); }
-  if (platform === 'mvf')  { mvfData  = []; clearFromLocal('mvf');  }
   openUploadModal(platform);
 });
 document.getElementById('error-close').addEventListener('click', hideError);
+
+/* ── EDM Campaign Management ────────────────────────────── */
+const EDM_KEY = 'nxg_email_campaigns';
+let customEmailCampaigns = JSON.parse(localStorage.getItem(EDM_KEY) || '[]');
+
+function saveCustomCampaigns() {
+  localStorage.setItem(EDM_KEY, JSON.stringify(customEmailCampaigns));
+}
+
+let edmEditId = null;
+
+function openEDMModal(id = null) {
+  edmEditId = id;
+  const modal = document.getElementById('edm-modal');
+  const err   = document.getElementById('edm-error');
+  err.style.display = 'none';
+
+  if (id) {
+    const c = customEmailCampaigns.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('edm-modal-title').textContent  = 'Edit Campaign';
+    document.getElementById('edm-name').value               = c.name        || '';
+    document.getElementById('edm-type').value               = c.type        || 'Newsletter';
+    document.getElementById('edm-subject').value            = c.subject     || '';
+    document.getElementById('edm-preview-text').value       = c.previewText || '';
+    document.getElementById('edm-from-name').value          = c.fromName    || '';
+    document.getElementById('edm-from-email').value         = c.fromEmail   || '';
+    document.getElementById('edm-recipients').value         = c.recipients  || '';
+    document.getElementById('edm-date').value               = c.sendDate    || '';
+    document.getElementById('edm-time').value               = c.sendTime    || '09:00';
+    document.getElementById('edm-status').value             = c.status      || 'draft';
+    document.getElementById('edm-body').value               = c.body        || '';
+  } else {
+    document.getElementById('edm-modal-title').textContent = 'Create Campaign';
+    document.getElementById('edm-name').value          = '';
+    document.getElementById('edm-type').value          = 'Newsletter';
+    document.getElementById('edm-subject').value       = '';
+    document.getElementById('edm-preview-text').value  = '';
+    document.getElementById('edm-from-name').value     = '';
+    document.getElementById('edm-from-email').value    = '';
+    document.getElementById('edm-recipients').value    = '';
+    document.getElementById('edm-date').value          = toDateStr(new Date());
+    document.getElementById('edm-time').value          = '09:00';
+    document.getElementById('edm-status').value        = 'draft';
+    document.getElementById('edm-body').value          = '';
+  }
+
+  updateSubjectCount();
+  showEDMEditor();
+  modal.style.display = 'flex';
+}
+
+function closeEDMModal() {
+  document.getElementById('edm-modal').style.display = 'none';
+  edmEditId = null;
+}
+
+function updateSubjectCount() {
+  const input = document.getElementById('edm-subject');
+  const counter = document.getElementById('edm-subject-count');
+  const len = input.value.length;
+  counter.textContent = `${len} / 60`;
+  counter.className = 'edm-char-count' + (len > 55 ? ' over' : len > 45 ? ' warn' : '');
+}
+
+function showEDMEditor() {
+  document.getElementById('edm-body').style.display         = '';
+  document.getElementById('edm-preview-pane').style.display = 'none';
+  document.getElementById('edm-preview-toggle').textContent = '👁 Preview';
+}
+
+function saveEDM(status) {
+  const name    = document.getElementById('edm-name').value.trim();
+  const subject = document.getElementById('edm-subject').value.trim();
+  const err     = document.getElementById('edm-error');
+
+  if (!name)    { err.textContent = 'Campaign name is required.'; err.style.display = ''; return; }
+  if (!subject) { err.textContent = 'Subject line is required.';  err.style.display = ''; return; }
+  err.style.display = 'none';
+
+  const campaign = {
+    id:          edmEditId || Date.now().toString(),
+    name,
+    type:        document.getElementById('edm-type').value,
+    subject,
+    previewText: document.getElementById('edm-preview-text').value.trim(),
+    fromName:    document.getElementById('edm-from-name').value.trim(),
+    fromEmail:   document.getElementById('edm-from-email').value.trim(),
+    recipients:  parseInt(document.getElementById('edm-recipients').value) || 0,
+    sendDate:    document.getElementById('edm-date').value,
+    sendTime:    document.getElementById('edm-time').value,
+    status:      status || document.getElementById('edm-status').value,
+    body:        document.getElementById('edm-body').value,
+    created:     edmEditId ? (customEmailCampaigns.find(x => x.id === edmEditId)?.created || toDateStr(new Date())) : toDateStr(new Date()),
+    // stats default to 0 for new campaigns
+    sent: 0, opens: 0, clicks: 0, conv: 0, unsub: 0,
+  };
+
+  if (edmEditId) {
+    const idx = customEmailCampaigns.findIndex(x => x.id === edmEditId);
+    if (idx >= 0) {
+      const existing = customEmailCampaigns[idx];
+      campaign.sent  = existing.sent  || 0;
+      campaign.opens = existing.opens || 0;
+      campaign.clicks= existing.clicks|| 0;
+      campaign.conv  = existing.conv  || 0;
+      campaign.unsub = existing.unsub || 0;
+      customEmailCampaigns[idx] = campaign;
+    }
+  } else {
+    customEmailCampaigns.unshift(campaign);
+  }
+
+  saveCustomCampaigns();
+  closeEDMModal();
+  renderTable();
+}
+
+function deleteEDM(id) {
+  if (!confirm('Delete this campaign?')) return;
+  customEmailCampaigns = customEmailCampaigns.filter(x => x.id !== id);
+  saveCustomCampaigns();
+  renderTable();
+}
+
+function duplicateEDM(id) {
+  const c = customEmailCampaigns.find(x => x.id === id);
+  if (!c) return;
+  const copy = { ...c, id: Date.now().toString(), name: c.name + ' (Copy)', status: 'draft', sent: 0, opens: 0, clicks: 0, conv: 0, unsub: 0, created: toDateStr(new Date()) };
+  customEmailCampaigns.unshift(copy);
+  saveCustomCampaigns();
+  renderTable();
+}
+
+/* Toolbar insert helpers */
+document.getElementById('edm-body').addEventListener('keydown', () => {});
+document.querySelectorAll('.edm-fmt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const ta   = document.getElementById('edm-body');
+    const tag  = btn.dataset.tag;
+    const ins  = btn.dataset.insert;
+    const start= ta.selectionStart, end = ta.selectionEnd;
+    const sel  = ta.value.slice(start, end);
+    let replacement = '';
+    if (tag)  replacement = `<${tag}>${sel || 'text'}</${tag}>`;
+    if (ins === 'h2') replacement = `<h2>${sel || 'Heading'}</h2>`;
+    if (ins === 'h3') replacement = `<h3>${sel || 'Subheading'}</h3>`;
+    if (ins === 'p')  replacement = `<p>${sel || 'Paragraph text'}</p>`;
+    if (ins === 'a')  replacement = `<a href="https://">${sel || 'Click here'}</a>`;
+    if (ins === 'img')replacement = `<img src="https://" alt="${sel || 'image'}" style="max-width:100%">`;
+    ta.setRangeText(replacement, start, end, 'end');
+    ta.focus();
+  });
+});
+
+document.getElementById('edm-subject').addEventListener('input', updateSubjectCount);
+
+document.getElementById('edm-preview-toggle').addEventListener('click', () => {
+  const pane   = document.getElementById('edm-preview-pane');
+  const ta     = document.getElementById('edm-body');
+  const btn    = document.getElementById('edm-preview-toggle');
+  const showing = pane.style.display !== 'none';
+  if (showing) {
+    pane.style.display = 'none';
+    ta.style.display   = '';
+    btn.textContent    = '👁 Preview';
+  } else {
+    pane.innerHTML     = ta.value || '<p style="color:#888">No content yet.</p>';
+    pane.style.display = '';
+    ta.style.display   = 'none';
+    btn.textContent    = '✏ Edit';
+  }
+});
+
+document.getElementById('create-edm-btn').addEventListener('click', () => openEDMModal());
+document.getElementById('edm-modal-close').addEventListener('click', closeEDMModal);
+document.getElementById('edm-cancel-btn').addEventListener('click',  closeEDMModal);
+document.getElementById('edm-backdrop').addEventListener('click',    closeEDMModal);
+document.getElementById('edm-save-draft').addEventListener('click',    () => saveEDM('draft'));
+document.getElementById('edm-save-schedule').addEventListener('click', () => saveEDM('scheduled'));
 
 /* ── Auth & User management ─────────────────────────────── */
 const SESSION_KEY = 'nxg_auth';

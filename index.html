@@ -11,6 +11,7 @@
   <script src="config.js" defer></script>
   <script src="fb-api.js" defer></script>
   <script src="gads-api.js" defer></script>
+  <script src="ga-api.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -98,11 +99,15 @@
           <span class="nav-pip pip-mvf"></span>
           MVF
         </button>
+        <button class="nav-item" data-platform="email">
+          <span class="nav-pip pip-email"></span>
+          Email Marketing
+        </button>
       </nav>
 
       <div class="sidebar-footer">
         <span class="live-dot"></span>
-        Live: FB &amp; Google Ads &nbsp;|&nbsp; GA: Mock
+        Live: FB, Google Ads &amp; GA4
       </div>
       <button class="manage-users-btn" id="manage-users-btn" style="display:none">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -126,6 +131,7 @@
           <p id="page-subtitle">All platforms combined</p>
         </div>
         <div class="date-controls">
+          <button id="create-edm-btn" class="create-edm-btn" style="display:none">+ Create Campaign</button>
           <button id="import-csv-btn" class="import-csv-btn" style="display:none">&#8593; Import CSV</button>
           <select id="brand-select" class="brand-select" style="display:none">
             <option value="7066096988">NEXGEN</option>
@@ -279,10 +285,124 @@
         <p class="upload-drop-sub">Drag &amp; drop a file, or <label for="upload-file" id="upload-file-label" class="upload-file-label">browse</label></p>
         <input type="file" id="upload-file" accept=".csv,.txt" style="display:none">
         <div class="upload-drop-format">
-          Required columns: <strong>date</strong>, <strong>spend</strong><br>
+          Required columns: <strong>date</strong>, <strong>spend</strong>, <strong>uid</strong>, <strong>size</strong><br>
           Optional: <strong>leads</strong> &nbsp;|&nbsp; <strong>revenue</strong> &nbsp;|&nbsp; <strong>category</strong>
         </div>
         <button id="upload-sample-btn" class="upload-sample-btn">&#8595; Download sample CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDM Create/Edit modal -->
+  <div id="edm-modal" class="edm-modal" style="display:none">
+    <div class="edm-backdrop" id="edm-backdrop"></div>
+    <div class="edm-modal-box">
+      <div class="edm-modal-head">
+        <div class="edm-modal-head-left">
+          <div class="edm-modal-icon">&#9993;</div>
+          <div>
+            <h3 id="edm-modal-title">Create Campaign</h3>
+            <p id="edm-modal-subtitle">Set up your email campaign details</p>
+          </div>
+        </div>
+        <button class="edm-modal-close" id="edm-modal-close">&times;</button>
+      </div>
+      <div class="edm-modal-body">
+
+        <div class="edm-section">
+          <p class="edm-section-label">Campaign Details</p>
+          <div class="edm-row">
+            <div class="edm-field edm-field--grow">
+              <label class="edm-label">Campaign Name</label>
+              <input type="text" id="edm-name" class="edm-input" placeholder="e.g. June Newsletter">
+            </div>
+            <div class="edm-field edm-field--sm">
+              <label class="edm-label">Type</label>
+              <select id="edm-type" class="edm-select">
+                <option value="Newsletter">Newsletter</option>
+                <option value="Promotional">Promotional</option>
+                <option value="Automated">Automated</option>
+              </select>
+            </div>
+          </div>
+          <div class="edm-field">
+            <label class="edm-label">Subject Line <span id="edm-subject-count" class="edm-char-count">0 / 60</span></label>
+            <input type="text" id="edm-subject" class="edm-input" placeholder="Your email subject line" maxlength="60">
+          </div>
+          <div class="edm-field">
+            <label class="edm-label">Preview Text <span class="edm-label-hint">(shown in inbox preview)</span></label>
+            <input type="text" id="edm-preview-text" class="edm-input" placeholder="Brief preview shown after subject line…">
+          </div>
+        </div>
+
+        <div class="edm-section">
+          <p class="edm-section-label">Sender</p>
+          <div class="edm-row">
+            <div class="edm-field edm-field--grow">
+              <label class="edm-label">From Name</label>
+              <input type="text" id="edm-from-name" class="edm-input" placeholder="e.g. NXG Marketing">
+            </div>
+            <div class="edm-field edm-field--grow">
+              <label class="edm-label">From Email</label>
+              <input type="email" id="edm-from-email" class="edm-input" placeholder="marketing@example.com">
+            </div>
+          </div>
+        </div>
+
+        <div class="edm-section">
+          <p class="edm-section-label">Schedule</p>
+          <div class="edm-row">
+            <div class="edm-field">
+              <label class="edm-label">Recipients</label>
+              <input type="number" id="edm-recipients" class="edm-input" placeholder="0" min="0">
+            </div>
+            <div class="edm-field">
+              <label class="edm-label">Send Date</label>
+              <input type="date" id="edm-date" class="edm-input">
+            </div>
+            <div class="edm-field">
+              <label class="edm-label">Send Time</label>
+              <input type="time" id="edm-time" class="edm-input" value="09:00">
+            </div>
+            <div class="edm-field">
+              <label class="edm-label">Status</label>
+              <select id="edm-status" class="edm-select">
+                <option value="draft">Draft</option>
+                <option value="scheduled">Scheduled</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="edm-section">
+          <p class="edm-section-label">Email Content</p>
+          <div class="edm-field">
+            <div class="edm-content-toolbar">
+              <button type="button" class="edm-fmt-btn" data-tag="b"><b>B</b></button>
+              <button type="button" class="edm-fmt-btn" data-tag="i"><i>I</i></button>
+              <button type="button" class="edm-fmt-btn" data-tag="u"><u>U</u></button>
+              <span class="edm-toolbar-sep"></span>
+              <button type="button" class="edm-fmt-btn" data-insert="h2">H2</button>
+              <button type="button" class="edm-fmt-btn" data-insert="h3">H3</button>
+              <button type="button" class="edm-fmt-btn" data-insert="p">P</button>
+              <button type="button" class="edm-fmt-btn" data-insert="a">Link</button>
+              <button type="button" class="edm-fmt-btn" data-insert="img">Img</button>
+              <span class="edm-toolbar-sep"></span>
+              <button type="button" class="edm-preview-toggle-btn" id="edm-preview-toggle">&#128065; Preview</button>
+            </div>
+            <textarea id="edm-body" class="edm-textarea" placeholder="Write your email content here. You can use HTML for rich formatting.&#10;&#10;Example:&#10;&lt;h2&gt;Hello {{first_name}},&lt;/h2&gt;&#10;&lt;p&gt;Your message here...&lt;/p&gt;&#10;&lt;a href=&quot;https://example.com&quot;&gt;Click here&lt;/a&gt;"></textarea>
+            <div id="edm-preview-pane" class="edm-preview-pane" style="display:none"></div>
+          </div>
+        </div>
+
+        <div id="edm-error" class="edm-error" style="display:none"></div>
+      </div>
+      <div class="edm-modal-foot">
+        <button type="button" class="edm-cancel-btn" id="edm-cancel-btn">Cancel</button>
+        <div class="edm-foot-right">
+          <button type="button" class="edm-save-btn edm-save-draft" id="edm-save-draft">Save Draft</button>
+          <button type="button" class="edm-save-btn edm-save-schedule" id="edm-save-schedule">Schedule</button>
+        </div>
       </div>
     </div>
   </div>
