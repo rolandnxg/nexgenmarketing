@@ -1304,13 +1304,14 @@ function renderTable() {
 
 /* ── Page header ────────────────────────────────────────── */
 const PLATFORM_META = {
-  all:   { title: 'Overview',           sub: 'All platforms combined' },
+  all:   { title: 'Dashboard',          sub: 'All platforms combined' },
   ga:    { title: 'Google Analytics',   sub: 'Website traffic & behaviour' },
   fb:    { title: 'Facebook Ads',       sub: 'Paid social performance' },
   gads:  { title: 'Google Ads',         sub: 'Search & display performance' },
   bark:  { title: 'Bark',               sub: 'Lead marketplace performance' },
   mvf:   { title: 'MVF',                sub: 'MVF lead generation performance' },
   email: { title: 'Email Marketing',    sub: 'Campaign performance & engagement' },
+  leads: { title: 'Leads',             sub: 'Team lead cost & ROI' },
 };
 
 function renderHeader() {
@@ -1319,11 +1320,72 @@ function renderHeader() {
   document.getElementById('page-subtitle').textContent = m.sub;
   document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
-  document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf') ? '' : 'none';
+  document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf' || platform === 'leads') ? '' : 'none';
   const importBtn = document.getElementById('bark-import-btn');
   if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
   const mvfImportBtn = document.getElementById('mvf-import-btn');
   if (mvfImportBtn) mvfImportBtn.style.display = (platform === 'mvf' && mvfData.length > 0) ? '' : 'none';
+}
+
+/* ── Leads view ─────────────────────────────────────────── */
+const LEADS_DEFAULT = [
+  { team: 'SOHO',                  cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Nexgen VIC',            cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Nexgen NSW',            cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Business Telecom NSW',  cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Nexgen QLD',            cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Nexgen SA',             cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Nexgen WA',             cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+  { team: 'Business Telecom QLD',  cost: 0, leadsWorked: null, roi: null, numSigned365: null, signed365: null },
+];
+let leadsData = (() => {
+  try { const s = localStorage.getItem('leads_data'); return s ? JSON.parse(s) : LEADS_DEFAULT; }
+  catch { return LEADS_DEFAULT; }
+})();
+
+function renderLeadsView() {
+  const isLeads = platform === 'leads';
+  document.getElementById('leads-view').style.display = isLeads ? '' : 'none';
+  document.getElementById('kpi-grid').style.display   = isLeads ? 'none' : '';
+  document.querySelector('.charts-top').style.display  = isLeads ? 'none' : '';
+  document.querySelector('.charts-bottom').style.display = isLeads ? 'none' : '';
+  document.querySelector('.table-card').style.display  = isLeads ? 'none' : '';
+  if (!isLeads) return;
+
+  const total = leadsData.reduce((a, t) => a + t.cost, 0);
+  const totalWorked    = leadsData.reduce((a, t) => a + (t.leadsWorked  ?? 0), 0);
+  const totalNumSigned = leadsData.reduce((a, t) => a + (t.numSigned365 ?? 0), 0);
+  document.getElementById('leads-table-body').innerHTML = [
+    ...leadsData.map(t => `
+      <tr>
+        <td>${t.team}</td>
+        <td class="lt-cost-cell">${fmt$(t.cost)}</td>
+        <td class="lt-worked-cell">${t.leadsWorked != null ? t.leadsWorked : ''}</td>
+        <td class="lt-roi-cell">${t.roi != null ? t.roi : ''}</td>
+        <td class="lt-numsigned-cell">${t.numSigned365 != null ? t.numSigned365 : ''}</td>
+        <td class="lt-signed-cell">${t.signed365 != null ? t.signed365 : ''}</td>
+      </tr>`),
+    `<tr class="lt-separator"><td colspan="6">GLOBAL Leads</td></tr>`,
+  ].join('');
+
+  document.getElementById('leads-table-foot').innerHTML = `
+    <tr>
+      <td><strong>Total</strong></td>
+      <td class="lt-cost-cell">${fmt$(total)}</td>
+      <td class="lt-worked-cell">${totalWorked > 0 ? totalWorked : ''}</td>
+      <td class="lt-roi-cell"></td>
+      <td class="lt-numsigned-cell">${totalNumSigned > 0 ? totalNumSigned : ''}</td>
+      <td class="lt-signed-cell"></td>
+    </tr>`;
+
+  document.getElementById('leads-export-btn').onclick = () => {
+    const rows = [['Team','Lead Cost','Total Leads Worked On','ROI','# Signed 365','Signed 365'], ...leadsData.map(t => [t.team, t.cost, t.leadsWorked ?? '', t.roi ?? '', t.numSigned365 ?? '', t.signed365 ?? ''])];
+    const csv  = rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv,' + encodeURIComponent(csv);
+    a.download = 'leads.csv';
+    a.click();
+  };
 }
 
 /* ── Overview data builder ──────────────────────────────── */
@@ -1452,6 +1514,9 @@ async function update() {
     showLoading(false);
     return;
   }
+
+  renderLeadsView();
+  if (platform === 'leads') return;
 
   const s = platform === 'fb'   ? fbApiDaily
           : platform === 'gads' && gadsApiDaily.length > 0 ? gadsApiDaily
@@ -1685,15 +1750,63 @@ function loadMVFCSV(file) {
 
 document.getElementById('mvf-import-btn').addEventListener('click', () => { mvfData = []; clearFromLocal('mvf'); update(); });
 
+/* ── Leads CSV import ───────────────────────────────────── */
+function loadLeadsCSV(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const lines = e.target.result.trim().split('\n').filter(Boolean);
+      if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row.');
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const iTeam      = headers.indexOf('team');
+      const iCost      = headers.indexOf('cost');
+      const iWorked    = headers.indexOf('leadsworked');
+      const iRoi       = headers.indexOf('roi');
+      const iNumSigned = headers.indexOf('numsigned365');
+      const iS365      = headers.indexOf('signed365');
+      if (iTeam === -1 || iCost === -1) throw new Error('CSV must have "team" and "cost" columns.');
+      const parsed = lines.slice(1).map(line => {
+        const cells       = line.split(',');
+        const cost        = parseFloat(cells[iCost]) || 0;
+        const leadsWorked = iWorked    >= 0 && cells[iWorked]?.trim()    !== '' ? parseFloat(cells[iWorked])    : null;
+        const roi         = iRoi       >= 0 && cells[iRoi]?.trim()       !== '' ? parseFloat(cells[iRoi])       : null;
+        const numSigned365 = iNumSigned >= 0 && cells[iNumSigned]?.trim() !== '' ? parseFloat(cells[iNumSigned]) : null;
+        const s365        = iS365      >= 0 && cells[iS365]?.trim()      !== '' ? parseFloat(cells[iS365])      : null;
+        return { team: cells[iTeam].trim(), cost, leadsWorked, roi, numSigned365, signed365: s365 };
+      }).filter(r => r.team);
+      if (parsed.length === 0) throw new Error('No valid rows found.');
+      leadsData = parsed;
+      localStorage.setItem('leads_data', JSON.stringify(leadsData));
+      closeUploadModal();
+      update();
+    } catch (err) {
+      showError('Leads CSV: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
 /* ── Shared upload modal ────────────────────────────────── */
 let _uploadColor = '#06b6d4';
 
 function openUploadModal(p) {
-  _uploadColor = p === 'bark' ? '#06b6d4' : '#f97316';
-  const name   = p === 'bark' ? 'Bark' : 'MVF';
+  _uploadColor = p === 'bark' ? '#06b6d4' : p === 'leads' ? '#10b981' : '#f97316';
+  const name   = p === 'bark' ? 'Bark' : p === 'leads' ? 'Leads' : 'MVF';
+  const leadsSample = [
+    'team,cost,leadsWorked,roi,numSigned365,signed365',
+    'SOHO,14708,45,0.65,3,12',
+    'Nexgen VIC,3023,18,,2,8',
+    'Nexgen NSW,1677,12,,1,5',
+    'Business Telecom NSW,877,9,,1,3',
+    'Nexgen QLD,210,5,34.19,1,1',
+    'Nexgen SA,938,10,,1,2',
+    'Nexgen WA,1152,14,,2,4',
+    'Business Telecom QLD,89,3,,0,1',
+  ].join('\n');
   const samples = {
-    bark: ['date,uid,size,spend,leads,revenue,category','01/05/2025,BK-001,Small,250.00,5,4500.00,Phone Systems','02/05/2025,BK-002,Medium,180.00,3,2700.00,VoIP','03/05/2025,BK-003,Large,310.00,7,6300.00,Phone Systems','04/05/2025,BK-004,Small,95.00,2,1800.00,Phone Systems','05/05/2025,BK-005,Medium,220.00,4,3600.00,VoIP'].join('\n'),
-    mvf:  ['date,uid,size,spend,leads,revenue,category','01/05/2025,MV-001,Medium,320.00,8,7200.00,Business Phones','02/05/2025,MV-002,Small,210.00,5,4500.00,VoIP','03/05/2025,MV-003,Large,450.00,11,9900.00,Business Phones','04/05/2025,MV-004,Small,130.00,3,2700.00,Broadband','05/05/2025,MV-005,Medium,280.00,7,6300.00,Business Phones'].join('\n'),
+    bark:  ['date,uid,size,spend,leads,revenue,category','01/05/2025,BK-001,Small,250.00,5,4500.00,Phone Systems','02/05/2025,BK-002,Medium,180.00,3,2700.00,VoIP','03/05/2025,BK-003,Large,310.00,7,6300.00,Phone Systems','04/05/2025,BK-004,Small,95.00,2,1800.00,Phone Systems','05/05/2025,BK-005,Medium,220.00,4,3600.00,VoIP'].join('\n'),
+    mvf:   ['date,uid,size,spend,leads,revenue,category','01/05/2025,MV-001,Medium,320.00,8,7200.00,Business Phones','02/05/2025,MV-002,Small,210.00,5,4500.00,VoIP','03/05/2025,MV-003,Large,450.00,11,9900.00,Business Phones','04/05/2025,MV-004,Small,130.00,3,2700.00,Broadband','05/05/2025,MV-005,Medium,280.00,7,6300.00,Business Phones'].join('\n'),
+    leads: leadsSample,
   };
   document.getElementById('upload-modal-title').textContent = `Import ${name} CSV`;
   document.getElementById('upload-drop-title').textContent  = `Import your ${name} CSV`;
@@ -1727,11 +1840,11 @@ uploadDropzone.addEventListener('drop', e => {
   uploadDropzone.style.borderColor = '';
   uploadDropzone.classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file) (platform === 'bark' ? loadBarkCSV : loadMVFCSV)(file);
+  if (file) (platform === 'leads' ? loadLeadsCSV : platform === 'bark' ? loadBarkCSV : loadMVFCSV)(file);
 });
 uploadDropzone.addEventListener('click', () => uploadFile.click());
 uploadFile.addEventListener('change', e => {
-  if (e.target.files[0]) (platform === 'bark' ? loadBarkCSV : loadMVFCSV)(e.target.files[0]);
+  if (e.target.files[0]) (platform === 'leads' ? loadLeadsCSV : platform === 'bark' ? loadBarkCSV : loadMVFCSV)(e.target.files[0]);
 });
 
 document.getElementById('upload-sample-btn').addEventListener('click', e => {

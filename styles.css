@@ -21,6 +21,7 @@
   --bark:          #06b6d4;
   --mvf:           #f97316;
   --email:         #a855f7;
+  --leads:         #10b981;
   --sidebar-w:     220px;
   --topbar-h:      64px;
   --radius:        12px;
@@ -252,19 +253,14 @@ button { cursor: pointer; border: none; background: none; font: inherit; color: 
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--accent-dim); color: var(--accent); }
 
-.nav-pip {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.nav-icon {
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
+  opacity: 0.6;
 }
-.pip-all  { background: var(--accent); }
-.pip-ga   { background: var(--ga); }
-.pip-fb   { background: var(--fb); }
-.pip-gads { background: var(--gads); }
-.pip-bark  { background: var(--bark); }
-.pip-mvf   { background: var(--mvf); }
-.pip-email { background: var(--email); }
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon { opacity: 1; }
 
 .sidebar-footer {
   display: flex;
@@ -1474,6 +1470,125 @@ tbody tr:hover td { background: var(--surface-2); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ── Leads View ────────────────────────────────────────── */
+#leads-view { padding: 8px 0; }
+.leads-table-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.leads-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.leads-table thead tr {
+  background: var(--surface-2);
+}
+.leads-table th {
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.lt-cost { background: #c0392b !important; color: #fff !important; text-align: right !important; }
+.lt-worked    { background: var(--surface-3) !important; text-align: right !important; }
+.lt-roi       { background: var(--surface-3) !important; text-align: right !important; }
+.lt-numsigned { background: var(--surface-3) !important; text-align: right !important; }
+.lt-signed    { background: var(--surface-3) !important; text-align: right !important; }
+.leads-table td {
+  padding: 9px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  color: var(--text);
+}
+.leads-table td.lt-cost-cell {
+  background: rgba(192,57,43,.15);
+  color: #e74c3c;
+  font-weight: 600;
+  text-align: right;
+}
+.leads-table td.lt-worked-cell {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  text-align: right;
+}
+.leads-table td.lt-roi-cell {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  text-align: right;
+}
+.leads-table td.lt-numsigned-cell {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  text-align: right;
+}
+.leads-table td.lt-signed-cell {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  text-align: right;
+}
+.leads-table tr.lt-separator td {
+  background: var(--surface-2);
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.leads-table tr.lt-separator td.lt-cost-cell,
+.leads-table tr.lt-separator td.lt-worked-cell,
+.leads-table tr.lt-separator td.lt-roi-cell,
+.leads-table tr.lt-separator td.lt-numsigned-cell,
+.leads-table tr.lt-separator td.lt-signed-cell {
+  background: var(--surface-2);
+}
+.leads-table tfoot tr {
+  background: var(--surface-2);
+}
+.leads-table tfoot td {
+  padding: 11px 16px;
+  font-weight: 700;
+  color: var(--text);
+  border-top: 1px solid var(--border);
+}
+.leads-table tfoot td.lt-cost-cell {
+  background: rgba(192,57,43,.25);
+  color: #e74c3c;
+  font-size: 15px;
+  text-align: right;
+}
+.leads-table tfoot td.lt-worked-cell,
+.leads-table tfoot td.lt-roi-cell,
+.leads-table tfoot td.lt-numsigned-cell,
+.leads-table tfoot td.lt-signed-cell {
+  background: var(--surface-2);
+}
+.leads-table-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.lt-action-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-faint);
+  padding: 5px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.lt-action-btn:hover { color: var(--text); border-color: var(--text-faint); }
 
 /* ── Responsive ────────────────────────────────────────── */
 @media (max-width: 1400px) {
