@@ -137,7 +137,7 @@ app.get('/api/gads/daily', async (req, res) => {
       SELECT segments.date, metrics.cost_micros, metrics.impressions,
              metrics.clicks, metrics.conversions, metrics.conversions_value
       FROM campaign
-      WHERE campaign.status = 'ENABLED' AND ${dateCond}
+      WHERE ${dateCond}
       ORDER BY segments.date ASC
     `;
 
@@ -173,7 +173,7 @@ app.get('/api/gads/campaigns', async (req, res) => {
              metrics.cost_micros, metrics.impressions, metrics.clicks,
              metrics.conversions, metrics.conversions_value
       FROM campaign
-      WHERE campaign.status = 'ENABLED' AND ${dateCond}
+      WHERE ${dateCond}
       ORDER BY metrics.cost_micros DESC
     `;
 

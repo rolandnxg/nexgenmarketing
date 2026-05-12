@@ -1251,7 +1251,7 @@ function renderTable() {
                ? [...overviewGadsCampaigns, ...fbApiCampaigns]
              : platform === 'all' ? campaigns
              : campaigns.filter(c => c.platform === platform))
-             .filter(c => platform !== 'fb' || c.status === 'active');
+;
 
   document.getElementById('table-title').textContent = 'Campaign Performance';
   badge.textContent = rows.length + ' campaigns';
