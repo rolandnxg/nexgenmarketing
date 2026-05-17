@@ -102,7 +102,8 @@ let mvfData               = [];
 let overviewGadsDaily     = [];
 let overviewGadsCampaigns = [];
 let platform         = 'all';
-let gadsSubView      = 'campaigns'; // 'campaigns' | 'analysis'
+let gadsSubView      = 'campaigns'; // 'campaigns' | 'analysis' | 'keyword-analyzer'
+let caStatusFilter   = 'all';       // 'all' | 'active' | 'paused'
 let days             = 30;
 let dateFrom         = null;
 let dateTo           = null;
@@ -1398,10 +1399,16 @@ function renderLeadsView() {
 /* ── Campaign Analysis ──────────────────────────────────── */
 function renderCampaignAnalysis() {
   const el = document.getElementById('gads-analysis-cards');
-  const campaigns = gadsApiCampaigns;
+  const campaigns = caStatusFilter === 'all'
+    ? gadsApiCampaigns
+    : gadsApiCampaigns.filter(c => c.status === caStatusFilter);
 
-  if (campaigns.length === 0) {
+  if (gadsApiCampaigns.length === 0) {
     el.innerHTML = '<div class="ca-empty">No campaign data available. Select an account and date range first.</div>';
+    return;
+  }
+  if (campaigns.length === 0) {
+    el.innerHTML = '<div class="ca-empty">No campaigns match the selected filter.</div>';
     return;
   }
 
@@ -1992,7 +1999,19 @@ document.querySelectorAll('.sub-nav-item').forEach(btn => {
     document.querySelectorAll('.sub-nav-item').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     gadsSubView = btn.dataset.sub;
+    caStatusFilter = 'all';
+    document.querySelectorAll('.ca-filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.ca-filter-btn[data-filter="all"]').classList.add('active');
     update();
+  });
+});
+
+document.querySelectorAll('.ca-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.ca-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    caStatusFilter = btn.dataset.filter;
+    renderCampaignAnalysis();
   });
 });
 

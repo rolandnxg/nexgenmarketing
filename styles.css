@@ -1587,6 +1587,24 @@ tbody tr:hover td { background: var(--surface-2); }
 }
 
 /* ── Campaign Analysis ──────────────────────────────────── */
+.ca-filter-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ca-filter-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+.ca-filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ca-filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 #gads-analysis-cards { display: flex; flex-direction: column; gap: 16px; }
 .ca-empty { color: var(--text-muted); font-size: 14px; text-align: center; padding: 48px; }
 .ca-card {
