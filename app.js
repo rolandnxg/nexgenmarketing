@@ -102,6 +102,7 @@ let mvfData               = [];
 let overviewGadsDaily     = [];
 let overviewGadsCampaigns = [];
 let platform         = 'all';
+let gadsSubView      = 'campaigns'; // 'campaigns' | 'analysis'
 let days             = 30;
 let dateFrom         = null;
 let dateTo           = null;
@@ -1318,11 +1319,12 @@ const PLATFORM_META = {
 function renderHeader() {
   const m = PLATFORM_META[platform];
   document.getElementById('page-title').textContent    = m.title;
-  document.getElementById('page-subtitle').textContent = m.sub;
+  document.getElementById('page-subtitle').textContent =
+    (platform === 'gads' && gadsSubView === 'analysis') ? 'Negative Keyword Analyzer' : m.sub;
   document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
   document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf' || platform === 'leads') ? '' : 'none';
-  document.getElementById('nka-toggle-btn').style.display  = platform === 'gads' ? '' : 'none';
+  document.getElementById('nka-toggle-btn').style.display  = 'none';
   const importBtn = document.getElementById('bark-import-btn');
   if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
   const mvfImportBtn = document.getElementById('mvf-import-btn');
@@ -1573,7 +1575,7 @@ async function update() {
     showLoading(false);
   }
 
-  if (platform === 'gads') {
+  if (platform === 'gads' && gadsSubView === 'campaigns') {
     document.getElementById('loading-msg').textContent = 'Fetching Google Ads data…';
     showLoading(true);
     try {
@@ -1628,6 +1630,18 @@ async function update() {
 
   renderLeadsView();
   if (platform === 'leads') return;
+
+  // Google Ads — Analysis sub-view (NKA tool)
+  const isGadsAnalysis = platform === 'gads' && gadsSubView === 'analysis';
+  document.getElementById('nka-panel').style.display = isGadsAnalysis ? '' : 'none';
+  if (isGadsAnalysis) {
+    document.getElementById('kpi-grid').style.display = 'none';
+    document.querySelector('.charts-top').style.display = 'none';
+    document.querySelector('.charts-bottom').style.display = 'none';
+    document.querySelector('.table-card').style.display = 'none';
+    document.getElementById('gads-analysis').style.display = 'none';
+    return;
+  }
 
   const s = platform === 'fb'   ? fbApiDaily
           : platform === 'gads' && gadsApiDaily.length > 0 ? gadsApiDaily
@@ -1844,26 +1858,7 @@ async function update() {
   }
 
   /* ---- Wire up UI ---- */
-  let nkaVisible = false;
-  let rawData    = '';
-
-  function toggleNka() {
-    nkaVisible = !nkaVisible;
-    const panel = document.getElementById('nka-panel');
-    panel.style.display = nkaVisible ? '' : 'none';
-    if (nkaVisible) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  document.getElementById('nka-toggle-btn').addEventListener('click', toggleNka);
-
-  // Hide panel when switching platform
-  const origUpdate = window._nkaOrigUpdate;
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      nkaVisible = false;
-      document.getElementById('nka-panel').style.display = 'none';
-    });
-  });
+  let rawData = '';
 
   // Dropzone
   const dropzone = document.getElementById('nka-dropzone');
@@ -1943,7 +1938,22 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     platform = btn.dataset.platform;
+    // Show/hide gads sub-nav
+    const subnav = document.getElementById('gads-subnav');
+    if (subnav) subnav.style.display = platform === 'gads' ? '' : 'none';
+    // Reset sub-view when switching away from gads
+    if (platform !== 'gads') gadsSubView = 'campaigns';
     closeUploadModal();
+    update();
+  });
+});
+
+// Google Ads sub-nav
+document.querySelectorAll('.sub-nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.sub-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    gadsSubView = btn.dataset.sub;
     update();
   });
 });
