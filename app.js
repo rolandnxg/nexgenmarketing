@@ -1645,7 +1645,7 @@ async function update() {
     showLoading(false);
   }
 
-  if (platform === 'gads' && gadsSubView === 'campaigns') {
+  if (platform === 'gads') {
     document.getElementById('loading-msg').textContent = 'Fetching Google Ads data…';
     showLoading(true);
     try {
