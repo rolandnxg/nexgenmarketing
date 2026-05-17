@@ -1320,7 +1320,9 @@ function renderHeader() {
   const m = PLATFORM_META[platform];
   document.getElementById('page-title').textContent    = m.title;
   document.getElementById('page-subtitle').textContent =
-    (platform === 'gads' && gadsSubView === 'analysis') ? 'Negative Keyword Analyzer' : m.sub;
+    (platform === 'gads' && gadsSubView === 'analysis')         ? 'Negative Keyword Analyzer'
+  : (platform === 'gads' && gadsSubView === 'keyword-analyzer') ? 'Keyword Analyzer'
+  : m.sub;
   document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
   document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf' || platform === 'leads') ? '' : 'none';
@@ -1523,10 +1525,13 @@ async function update() {
   renderLeadsView();
   if (platform === 'leads') return;
 
-  // Google Ads — Analysis sub-view (NKA tool)
-  const isGadsAnalysis = platform === 'gads' && gadsSubView === 'analysis';
-  document.getElementById('nka-panel').style.display = isGadsAnalysis ? '' : 'none';
-  if (isGadsAnalysis) {
+  // Google Ads sub-views
+  const isGadsAnalysis  = platform === 'gads' && gadsSubView === 'analysis';
+  const isGadsKeywords  = platform === 'gads' && gadsSubView === 'keyword-analyzer';
+  const isGadsSubView   = isGadsAnalysis || isGadsKeywords;
+  document.getElementById('nka-panel').style.display              = isGadsAnalysis ? '' : 'none';
+  document.getElementById('keyword-analyzer-panel').style.display = isGadsKeywords ? '' : 'none';
+  if (isGadsSubView) {
     document.getElementById('kpi-grid').style.display = 'none';
     document.querySelector('.charts-top').style.display = 'none';
     document.querySelector('.charts-bottom').style.display = 'none';
