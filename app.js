@@ -1461,15 +1461,43 @@ function renderCampaignAnalysis() {
       }
     }
 
-    // CPA vs account average
-    if (c.conv > 0 && acctCpa > 0) {
-      if (cpa > acctCpa * 3) {
-        issues.push({ level: 'red', title: `Very high CPA — ${fmt$(cpa)}`, detail: `3× the account average of ${fmt$(acctCpa)}. This campaign is expensive relative to results.` });
-        recs.push('Significantly reduce bids or daily budget on this campaign', 'Identify and pause the most expensive keywords with zero or low conversions', 'Run a search terms report and add negatives to filter irrelevant traffic', 'Consider restructuring ad groups around tighter keyword themes');
-      } else if (cpa > acctCpa * 1.5) {
-        issues.push({ level: 'amber', title: `Above-average CPA — ${fmt$(cpa)}`, detail: `1.5× the account average of ${fmt$(acctCpa)}.` });
-        recs.push('Reduce bids on keywords with high CPA and low conversion volume', 'Test landing page variants to improve conversion rate', 'Review audience bid adjustments — exclude poor-performing segments');
+    // CPA vs $300 target
+    const CPA_TARGET = 300;
+    if (c.conv > 0) {
+      if (cpa > CPA_TARGET * 2) {
+        issues.push({ level: 'red', title: `CPA ${fmt$(cpa)} — critically over $${CPA_TARGET} target`, detail: `More than 2× the $${CPA_TARGET} CPA target. Every lead is costing too much to be profitable.` });
+        recs.push(
+          `Pause the highest-spend keywords that haven't converted in the last 30 days`,
+          `Run a search terms report — add irrelevant queries as exact-match negatives to stop wasted spend`,
+          `Switch to Manual CPC bidding and lower bids by 20–30% to reduce cost per click`,
+          `Tighten keyword match types from broad to phrase or exact to attract higher-intent searches`,
+          `Rewrite ad copy to pre-qualify leads — mention price, location, or service specifics to deter non-buyers`,
+          `Improve the landing page: add a clear single CTA, reduce form fields to name/phone/email only`,
+          `Add trust signals to the landing page: Google reviews, number of clients served, response-time guarantee`,
+          `Install call tracking — many leads may be calling directly and not being counted as conversions`,
+        );
+      } else if (cpa > CPA_TARGET) {
+        issues.push({ level: 'red', title: `CPA ${fmt$(cpa)} — over $${CPA_TARGET} target`, detail: `Exceeds the $${CPA_TARGET} CPA target. Action needed to reduce cost per lead.` });
+        recs.push(
+          `Review search terms report and add negative keywords to filter low-intent traffic`,
+          `Pause or reduce bids on ad groups or keywords with CPA above $${CPA_TARGET}`,
+          `Test a more specific landing page — one page per service/location converts better than a generic homepage`,
+          `Add lead form extensions directly in Google Ads so prospects can enquire without leaving the SERP`,
+          `A/B test headlines — leads respond better to outcome-focused copy ("Get a Quote in 60 Seconds")`,
+          `Set a Target CPA bid strategy at $${CPA_TARGET} and give it 2–3 weeks to learn`,
+          `Review device performance — if mobile CPA is high, apply a negative mobile bid adjustment`,
+        );
+      } else if (cpa <= CPA_TARGET * 0.7) {
+        issues.push({ level: 'green', title: `CPA ${fmt$(cpa)} — well within $${CPA_TARGET} target`, detail: `Strong cost per lead. Consider scaling budget to acquire more leads at this rate.` });
+        recs.push(
+          `Increase daily budget by 20–30% — CPA is healthy and there is room to scale`,
+          `Expand to similar audiences or lookalike segments to reach more potential leads`,
+          `Add new ad groups targeting related service keywords to grow lead volume`,
+        );
       }
+    } else if (c.spend > 100 && c.conv === 0) {
+      // zero conv already flagged above, but add CPA target context
+      recs.push(`Target CPA for all campaigns is $${CPA_TARGET} — currently no conversions are being tracked, so CPA cannot be calculated`);
     }
 
     // Low conversion rate (enough clicks, low CVR)
@@ -1502,7 +1530,7 @@ function renderCampaignAnalysis() {
         <div class="ca-metric"><span class="ca-metric-val">${c.conv > 0 ? fmtN(c.conv) : '—'}</span><span class="ca-metric-lbl">Conv.</span></div>
         <div class="ca-metric"><span class="ca-metric-val">${ctr > 0 ? ctr.toFixed(2) + '%' : '—'}</span><span class="ca-metric-lbl">CTR</span></div>
         <div class="ca-metric"><span class="ca-metric-val">${roas > 0 ? roas.toFixed(2) + 'x' : '—'}</span><span class="ca-metric-lbl">ROAS</span></div>
-        <div class="ca-metric"><span class="ca-metric-val">${cpa > 0 ? fmt$(cpa) : '—'}</span><span class="ca-metric-lbl">CPA</span></div>
+        <div class="ca-metric ${cpa > 300 ? 'ca-metric--over' : cpa > 0 ? 'ca-metric--ok' : ''}"><span class="ca-metric-val">${cpa > 0 ? fmt$(cpa) : '—'}</span><span class="ca-metric-lbl">CPA <span class="ca-target-label">(target &lt;$300)</span></span></div>
         <div class="ca-metric"><span class="ca-metric-val">${cpc > 0 ? fmt$(cpc) : '—'}</span><span class="ca-metric-lbl">CPC</span></div>
       </div>`;
 

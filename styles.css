@@ -1650,6 +1650,9 @@ tbody tr:hover td { background: var(--surface-2); }
 }
 .ca-metric-val { font-size: 14px; font-weight: 700; }
 .ca-metric-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.ca-metric--over .ca-metric-val { color: var(--red); }
+.ca-metric--ok   .ca-metric-val { color: #10b981; }
+.ca-target-label { font-size: 9px; text-transform: none; letter-spacing: 0; opacity: .7; }
 .ca-section-title {
   font-size: 11px;
   font-weight: 700;
