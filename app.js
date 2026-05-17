@@ -1849,7 +1849,9 @@ async function update() {
 
   function toggleNka() {
     nkaVisible = !nkaVisible;
-    document.getElementById('nka-panel').style.display = nkaVisible ? '' : 'none';
+    const panel = document.getElementById('nka-panel');
+    panel.style.display = nkaVisible ? '' : 'none';
+    if (nkaVisible) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   document.getElementById('nka-toggle-btn').addEventListener('click', toggleNka);

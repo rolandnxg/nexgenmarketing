@@ -187,6 +187,66 @@
           <button class="error-close" id="error-close">&times;</button>
         </div>
 
+        <!-- Negative Keyword Analyzer -->
+        <div id="nka-panel" style="display:none">
+          <div class="analysis-card">
+            <div class="analysis-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              <h3>Negative Keyword Analyzer</h3>
+              <span class="analysis-sub">Upload search terms report to find wasted spend</span>
+            </div>
+
+            <!-- Context form -->
+            <div id="nka-context" class="nka-context">
+              <div class="nka-context-grid">
+                <div class="nka-field">
+                  <label>Primary Service Keywords <span class="nka-req">*</span></label>
+                  <input id="nka-service" type="text" placeholder="e.g. google ads, ppc management, paid search" class="nka-input">
+                </div>
+                <div class="nka-field">
+                  <label>Brand Terms (never negate)</label>
+                  <input id="nka-brand" type="text" placeholder="e.g. nexgen, nxg" class="nka-input">
+                </div>
+                <div class="nka-field">
+                  <label>All Services Offered</label>
+                  <input id="nka-services-all" type="text" placeholder="e.g. seo, web design, social media" class="nka-input">
+                </div>
+                <div class="nka-field">
+                  <label>Competitor Strategy</label>
+                  <select id="nka-competitor-strategy" class="nka-input">
+                    <option value="block">Block — negate competitor traffic</option>
+                    <option value="allow">Allow — intentionally bidding on competitors</option>
+                  </select>
+                </div>
+              </div>
+              <div class="nka-upload-row">
+                <div id="nka-dropzone" class="nka-dropzone">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <p>Drop search terms CSV here or <label for="nka-file" class="nka-file-label">browse</label></p>
+                  <p class="nka-hint">Columns: Search term, Clicks, Cost, Conversions (Impressions optional)</p>
+                  <input type="file" id="nka-file" accept=".csv" style="display:none">
+                </div>
+                <div class="nka-or">or paste data</div>
+                <textarea id="nka-paste" class="nka-textarea" placeholder="Paste CSV data here&#10;Search term,Clicks,Cost,Conversions&#10;buy google ads services,12,45.20,2&#10;google ads jobs,8,22.10,0"></textarea>
+              </div>
+              <div class="nka-actions">
+                <button id="nka-sample-btn" class="nka-btn-secondary">Download Sample CSV</button>
+                <button id="nka-analyze-btn" class="nka-btn-primary">Analyze Search Terms</button>
+              </div>
+            </div>
+
+            <!-- Results -->
+            <div id="nka-results" style="display:none">
+              <div id="nka-summary" class="nka-summary"></div>
+              <div id="nka-groups"></div>
+              <div class="nka-footer-actions">
+                <button id="nka-reset-btn" class="nka-btn-secondary">Analyze New Data</button>
+                <button id="nka-copy-all-btn" class="nka-btn-primary">Copy All Negatives</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- KPI Cards -->
         <div class="kpi-grid" id="kpi-grid"></div>
 
@@ -257,66 +317,6 @@
               <span class="analysis-sub">Recommendations based on current data</span>
             </div>
             <div id="analysis-insights"></div>
-          </div>
-        </div>
-
-        <!-- Negative Keyword Analyzer -->
-        <div id="nka-panel" style="display:none">
-          <div class="analysis-card">
-            <div class="analysis-header">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-              <h3>Negative Keyword Analyzer</h3>
-              <span class="analysis-sub">Upload search terms report to find wasted spend</span>
-            </div>
-
-            <!-- Context form -->
-            <div id="nka-context" class="nka-context">
-              <div class="nka-context-grid">
-                <div class="nka-field">
-                  <label>Primary Service Keywords <span class="nka-req">*</span></label>
-                  <input id="nka-service" type="text" placeholder="e.g. google ads, ppc management, paid search" class="nka-input">
-                </div>
-                <div class="nka-field">
-                  <label>Brand Terms (never negate)</label>
-                  <input id="nka-brand" type="text" placeholder="e.g. nexgen, nxg" class="nka-input">
-                </div>
-                <div class="nka-field">
-                  <label>All Services Offered</label>
-                  <input id="nka-services-all" type="text" placeholder="e.g. seo, web design, social media" class="nka-input">
-                </div>
-                <div class="nka-field">
-                  <label>Competitor Strategy</label>
-                  <select id="nka-competitor-strategy" class="nka-input">
-                    <option value="block">Block — negate competitor traffic</option>
-                    <option value="allow">Allow — intentionally bidding on competitors</option>
-                  </select>
-                </div>
-              </div>
-              <div class="nka-upload-row">
-                <div id="nka-dropzone" class="nka-dropzone">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  <p>Drop search terms CSV here or <label for="nka-file" class="nka-file-label">browse</label></p>
-                  <p class="nka-hint">Columns: Search term, Clicks, Cost, Conversions (Impressions optional)</p>
-                  <input type="file" id="nka-file" accept=".csv" style="display:none">
-                </div>
-                <div class="nka-or">or paste data</div>
-                <textarea id="nka-paste" class="nka-textarea" placeholder="Paste CSV data here&#10;Search term,Clicks,Cost,Conversions&#10;buy google ads services,12,45.20,2&#10;google ads jobs,8,22.10,0"></textarea>
-              </div>
-              <div class="nka-actions">
-                <button id="nka-sample-btn" class="nka-btn-secondary">Download Sample CSV</button>
-                <button id="nka-analyze-btn" class="nka-btn-primary">Analyze Search Terms</button>
-              </div>
-            </div>
-
-            <!-- Results -->
-            <div id="nka-results" style="display:none">
-              <div id="nka-summary" class="nka-summary"></div>
-              <div id="nka-groups"></div>
-              <div class="nka-footer-actions">
-                <button id="nka-reset-btn" class="nka-btn-secondary">Analyze New Data</button>
-                <button id="nka-copy-all-btn" class="nka-btn-primary">Copy All Negatives</button>
-              </div>
-            </div>
           </div>
         </div>
 
