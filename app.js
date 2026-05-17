@@ -1322,6 +1322,7 @@ function renderHeader() {
   document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
   document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf' || platform === 'leads') ? '' : 'none';
+  document.getElementById('nka-toggle-btn').style.display  = platform === 'gads' ? '' : 'none';
   const importBtn = document.getElementById('bark-import-btn');
   if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
   const mvfImportBtn = document.getElementById('mvf-import-btn');
@@ -1387,6 +1388,115 @@ function renderLeadsView() {
     a.download = 'leads.csv';
     a.click();
   };
+}
+
+/* ── Google Ads Analysis ────────────────────────────────── */
+function renderAnalysis() {
+  const el = document.getElementById('gads-analysis');
+  if (platform !== 'gads') { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  const campaigns = gadsApiCampaigns.length > 0 ? gadsApiCampaigns : [];
+  const daily     = gadsApiDaily.length     > 0 ? gadsApiDaily     : [];
+
+  if (campaigns.length === 0 && daily.length === 0) {
+    document.getElementById('analysis-insights').innerHTML =
+      '<div class="analysis-empty">No data available for analysis.</div>';
+    return;
+  }
+
+  const insights = [];
+
+  const totalSpend = campaigns.reduce((a, c) => a + c.spend, 0);
+  const totalRev   = campaigns.reduce((a, c) => a + c.revenue, 0);
+  const totalConv  = campaigns.reduce((a, c) => a + c.conv, 0);
+  const totalClicks= campaigns.reduce((a, c) => a + (c.clicks || 0), 0);
+  const totalImpr  = campaigns.reduce((a, c) => a + (c.impressions || 0), 0);
+  const overallRoas = totalSpend > 0 ? totalRev / totalSpend : 0;
+  const overallCtr  = totalImpr  > 0 ? (totalClicks / totalImpr) * 100 : 0;
+
+  /* 1 — Low overall ROAS */
+  if (totalSpend > 0) {
+    if (overallRoas < 2) {
+      insights.push({ level: 'red', icon: '📉', title: 'Low overall ROAS', desc: `Your blended ROAS is ${overallRoas.toFixed(2)}x — well below the recommended 3x minimum. Review bidding strategies and landing page conversion rates.`, meta: overallRoas.toFixed(2) + 'x' });
+    } else if (overallRoas < 3) {
+      insights.push({ level: 'amber', icon: '⚠️', title: 'ROAS below target', desc: `Blended ROAS of ${overallRoas.toFixed(2)}x is under the 3x target. Consider pausing low-performing campaigns and reallocating budget.`, meta: overallRoas.toFixed(2) + 'x' });
+    } else {
+      insights.push({ level: 'green', icon: '✅', title: 'Healthy ROAS', desc: `Blended ROAS of ${overallRoas.toFixed(2)}x is above the 3x target. Good overall return on ad spend.`, meta: overallRoas.toFixed(2) + 'x' });
+    }
+  }
+
+  /* 2 — Low CTR */
+  if (totalImpr > 0) {
+    if (overallCtr < 2) {
+      insights.push({ level: 'red', icon: '👆', title: 'Low click-through rate', desc: `CTR of ${overallCtr.toFixed(2)}% is below the 2% benchmark. Ad copy or targeting may need improvement — test new headlines and audiences.`, meta: overallCtr.toFixed(2) + '%' });
+    } else if (overallCtr < 5) {
+      insights.push({ level: 'amber', icon: '👆', title: 'CTR could be improved', desc: `CTR of ${overallCtr.toFixed(2)}% is average. A/B testing ad copy and refining keyword match types could push this higher.`, meta: overallCtr.toFixed(2) + '%' });
+    }
+  }
+
+  /* 3 — Budget concentration */
+  if (campaigns.length > 1 && totalSpend > 0) {
+    const top = campaigns.slice().sort((a, b) => b.spend - a.spend)[0];
+    const topPct = (top.spend / totalSpend) * 100;
+    if (topPct > 70) {
+      insights.push({ level: 'amber', icon: '💰', title: 'Budget over-concentrated', desc: `"${top.name}" is consuming ${topPct.toFixed(0)}% of total spend. Diversifying budget across campaigns reduces risk and can unlock new audiences.`, meta: topPct.toFixed(0) + '%' });
+    }
+  }
+
+  /* 4 — High CPA campaigns */
+  const avgCpa = totalConv > 0 ? totalSpend / totalConv : 0;
+  const badCpa = campaigns.filter(c => c.conv > 0 && c.spend / c.conv > avgCpa * 2);
+  if (badCpa.length > 0) {
+    insights.push({ level: 'red', icon: '💸', title: `${badCpa.length} campaign${badCpa.length > 1 ? 's' : ''} with high CPA`, desc: `${badCpa.map(c => '"' + c.name + '"').join(', ')} ${badCpa.length > 1 ? 'have' : 'has'} a CPA more than 2× the account average (${fmt$(avgCpa)}). Review ad relevance, landing pages, and bids.`, meta: '2× avg' });
+  }
+
+  /* 5 — Paused campaigns with past spend */
+  const pausedWithSpend = campaigns.filter(c => c.status === 'paused' && c.spend > 0);
+  if (pausedWithSpend.length > 0) {
+    insights.push({ level: 'amber', icon: '⏸️', title: `${pausedWithSpend.length} paused campaign${pausedWithSpend.length > 1 ? 's' : ''} with spend`, desc: `${pausedWithSpend.map(c => '"' + c.name + '"').join(', ')} ${pausedWithSpend.length > 1 ? 'are' : 'is'} paused but recorded spend in the period. Review if these should be reactivated or their budgets reallocated.`, meta: fmt$(pausedWithSpend.reduce((a, c) => a + c.spend, 0)) });
+  }
+
+  /* 6 — Zero-conversion campaigns */
+  const zeroCv = campaigns.filter(c => c.spend > 50 && c.conv === 0);
+  if (zeroCv.length > 0) {
+    insights.push({ level: 'red', icon: '🚫', title: `${zeroCv.length} campaign${zeroCv.length > 1 ? 's' : ''} with no conversions`, desc: `${zeroCv.map(c => '"' + c.name + '"').join(', ')} spent ${fmt$(zeroCv.reduce((a, c) => a + c.spend, 0))} with zero conversions. Check conversion tracking, landing pages, and audience targeting.`, meta: 'No conv.' });
+  }
+
+  /* 7 — Spend trending down */
+  if (daily.length >= 6) {
+    const half = Math.floor(daily.length / 2);
+    const firstHalf  = daily.slice(0, half).reduce((a, d) => a + d.gads_spend, 0) / half;
+    const secondHalf = daily.slice(-half).reduce((a, d) => a + d.gads_spend, 0) / half;
+    const change = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf) * 100 : 0;
+    if (change < -20) {
+      insights.push({ level: 'amber', icon: '📊', title: 'Spend declining', desc: `Daily spend dropped ${Math.abs(change).toFixed(0)}% in the second half of the period. Check for budget caps, disapproved ads, or audience fatigue.`, meta: change.toFixed(0) + '%' });
+    }
+  }
+
+  const svgMap = {
+    '📉': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>',
+    '⚠️': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    '✅': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+    '👆': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    '💰': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+    '💸': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+    '⏸️': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+    '🚫': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+    '📊': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  };
+
+  document.getElementById('analysis-insights').innerHTML = insights.length === 0
+    ? '<div class="analysis-empty">All campaigns look healthy — no issues detected.</div>'
+    : insights.map(i => `
+      <div class="insight-row">
+        <div class="insight-icon ${i.level}">${svgMap[i.icon] || ''}</div>
+        <div class="insight-body">
+          <div class="insight-title">${i.title}</div>
+          <div class="insight-desc">${i.desc}</div>
+        </div>
+        <div class="insight-meta ${i.level}">${i.meta}</div>
+      </div>`).join('');
 }
 
 /* ── Overview data builder ──────────────────────────────── */
@@ -1527,11 +1637,303 @@ async function update() {
           : platform === 'all' && overviewGadsDaily.length > 0
             ? buildOverviewData(overviewGadsDaily, fbApiDaily, overviewGaDaily)
           : slice();
-  if (platform === 'email' && s.length === 0) { renderKPIs([]); renderCharts([]); renderTable(); return; }
+  if (platform === 'email' && s.length === 0) { renderKPIs([]); renderCharts([]); renderTable(); renderAnalysis(); return; }
   renderKPIs(s);
   renderCharts(s);
   renderTable();
+  renderAnalysis();
 }
+
+/* ── Negative Keyword Analyzer ──────────────────────────── */
+(function() {
+
+  /* ---- Pattern library ---- */
+  const EMPLOYMENT   = /\b(jobs?|careers?|hiring|salary|salaries|employment|resume|vacancy|vacancies|recruitment|glassdoor|indeed|work for|work at|apprentice|internship|traineeship)\b/i;
+  const NAVIGATION   = /\b(login|log in|sign in|account|portal|dashboard|password|reset|my account)\b/i;
+  const DIY_EDU      = /\b(how to|tutorial|diy|course|training|template|example|guide|wiki|youtube|learn|certification|exam|study)\b/i;
+  const DOCUMENT     = /\b(pdf|template|worksheet|checklist|ppt|powerpoint|ebook|whitepaper|download free)\b/i;
+  const FREE         = /\b(free|freeware|open source|no cost|gratis|complimentary)\b/i;
+  const PRICE_RESEARCH = /\b(how much|what does|cost of|price of|average cost|cost to|pricing guide)\b/i;
+  const COMPARISON   = /\bvs\.?\b|\bversus\b|\bcompare\b|\balternative\b|\bcomparison\b/i;
+  const COMMERCIAL_INV = /\b(best|top|reviews?|near me|recommended|leading|#1|number one)\b/i;
+
+  /* ---- Classify a single term ---- */
+  function classify(term, opts) {
+    const t     = term.toLowerCase();
+    const brand = (opts.brand || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const svc   = (opts.service || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const all   = (opts.servicesAll || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+
+    // Brand protection
+    if (brand.some(b => b && t.includes(b))) return { action: 'KEEP', category: 'Brand', level: 'green', confidence: 1.0, rationale: 'Contains brand term — never negate' };
+
+    // Primary service protection
+    if (svc.some(s => s && t.includes(s))) {
+      if (COMMERCIAL_INV.test(t)) return { action: 'KEEP', category: 'Commercial Intent', level: 'green', confidence: 0.95, rationale: 'Primary service + buying intent signals' };
+      if (COMPARISON.test(t)) return { action: 'KEEP', category: 'Comparison', level: 'green', confidence: 0.90, rationale: 'Comparison query with your service — high intent' };
+    }
+
+    // All services protection
+    if (all.some(s => s && t.includes(s))) return { action: 'KEEP', category: 'Service Offered', level: 'green', confidence: 0.90, rationale: 'Matches a service you offer' };
+
+    // Universal waste patterns
+    if (EMPLOYMENT.test(t))  return { action: 'NEGATIVE', category: 'Employment Intent', level: 'red',   confidence: 0.95, rationale: 'User seeking work, not purchasing', matchType: 'BROAD',  negLevel: 'Account' };
+    if (NAVIGATION.test(t))  return { action: 'NEGATIVE', category: 'Navigation/Login',  level: 'red',   confidence: 0.90, rationale: 'Existing customer accessing account', matchType: 'PHRASE', negLevel: 'Account' };
+    if (DOCUMENT.test(t))    return { action: 'NEGATIVE', category: 'Document Seeking',  level: 'red',   confidence: 0.90, rationale: 'Seeking downloadable resource, not service', matchType: 'BROAD', negLevel: 'Account' };
+    if (DIY_EDU.test(t))     return { action: 'NEGATIVE', category: 'DIY / Educational', level: 'amber', confidence: 0.85, rationale: 'Seeking free information, not paid service', matchType: 'PHRASE', negLevel: 'Campaign' };
+    if (FREE.test(t))        return { action: 'NEGATIVE', category: 'Free Seekers',      level: 'amber', confidence: 0.80, rationale: 'User seeking free solution — poor intent match', matchType: 'PHRASE', negLevel: 'Campaign' };
+
+    // Comparison without service = monitor
+    if (COMPARISON.test(t)) return { action: 'KEEP', category: 'Comparison', level: 'green', confidence: 0.75, rationale: 'Comparison query — high commercial intent' };
+
+    // Commercial investigation — protect
+    if (COMMERCIAL_INV.test(t)) return { action: 'KEEP', category: 'Commercial Intent', level: 'green', confidence: 0.80, rationale: 'Buying intent signals — commercial investigation' };
+
+    // Price research — monitor
+    if (PRICE_RESEARCH.test(t)) return { action: 'MONITOR', category: 'Price Research', level: 'amber', confidence: 0.55, rationale: 'Mid-funnel intent — monitor conversions before negating', matchType: 'PHRASE', negLevel: 'Campaign' };
+
+    return null; // no pattern match
+  }
+
+  /* ---- Performance-based waste ---- */
+  function perfWaste(row, acctAvgCpa) {
+    const { clicks, cost, conv } = row;
+    if (clicks < 20) return null; // insufficient data
+    if (conv === 0 && clicks >= 50) return { action: 'NEGATIVE', category: 'Zero Conversions', level: 'red', confidence: 0.75, rationale: `${clicks} clicks, 0 conversions — sufficient data to confirm poor performance`, matchType: 'PHRASE', negLevel: 'Campaign' };
+    if (conv === 0 && clicks >= 20) return { action: 'MONITOR', category: 'Low Performance', level: 'amber', confidence: 0.55, rationale: `${clicks} clicks, 0 conversions — more data needed for certainty`, matchType: 'PHRASE', negLevel: 'Campaign' };
+    if (conv > 0 && acctAvgCpa > 0) {
+      const cpa = cost / conv;
+      if (cpa > acctAvgCpa * 2) return { action: 'MONITOR', category: 'High CPA', level: 'amber', confidence: 0.60, rationale: `CPA ${fmt$(cpa)} is 2× account average (${fmt$(acctAvgCpa)}) — review bid strategy`, matchType: 'PHRASE', negLevel: 'Campaign' };
+    }
+    return null;
+  }
+
+  /* ---- Format match type for Google Ads ---- */
+  function fmtMatch(kw, matchType) {
+    if (matchType === 'PHRASE') return `"${kw}"`;
+    if (matchType === 'EXACT')  return `[${kw}]`;
+    return kw; // BROAD
+  }
+
+  /* ---- Parse CSV ---- */
+  function parseSearchTerms(raw) {
+    const lines = raw.trim().split('\n').filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,'').toLowerCase());
+    const iSearch = headers.findIndex(h => h.includes('search term') || h.includes('query') || h === 'term' || h === 'keyword');
+    const iClicks = headers.findIndex(h => h.includes('click'));
+    const iCost   = headers.findIndex(h => h.includes('cost') || h.includes('spend'));
+    const iConv   = headers.findIndex(h => h.includes('conv'));
+    const iImpr   = headers.findIndex(h => h.includes('impr'));
+    if (iSearch === -1) throw new Error('Could not find "Search term" column. Ensure your CSV has that header.');
+    return lines.slice(1).map(line => {
+      const cells = line.split(',').map(c => c.trim().replace(/"/g,''));
+      return {
+        term:  cells[iSearch] || '',
+        clicks: iClicks >= 0 ? parseFloat(cells[iClicks]) || 0 : 0,
+        cost:   iCost   >= 0 ? parseFloat(cells[iCost])   || 0 : 0,
+        conv:   iConv   >= 0 ? parseFloat(cells[iConv])   || 0 : 0,
+        impr:   iImpr   >= 0 ? parseFloat(cells[iImpr])   || 0 : 0,
+      };
+    }).filter(r => r.term);
+  }
+
+  /* ---- Run analysis ---- */
+  function analyze(rows, opts) {
+    const totalCost = rows.reduce((a, r) => a + r.cost, 0);
+    const totalConv = rows.reduce((a, r) => a + r.conv, 0);
+    const totalClicks = rows.reduce((a, r) => a + r.clicks, 0);
+    const acctAvgCpa = totalConv > 0 ? totalCost / totalConv : 0;
+
+    const results = rows.map(row => {
+      const pattern = classify(row.term, opts);
+      const perf    = !pattern || pattern.action === 'KEEP' ? null : perfWaste(row, acctAvgCpa);
+      const result  = pattern || perf || { action: 'MONITOR', category: 'Unclassified', level: 'grey', confidence: 0.40, rationale: 'No pattern match — monitor for performance signals' };
+      // Override with perf if pattern says monitor but perf says negative
+      const final = (pattern && pattern.action === 'NEGATIVE') ? pattern
+                  : (perf   && perf.action   === 'NEGATIVE') ? perf
+                  : pattern || perf || result;
+      return { ...row, ...final };
+    });
+
+    return { results, totalCost, totalConv, totalClicks, acctAvgCpa };
+  }
+
+  /* ---- Group results ---- */
+  function groupResults(results) {
+    const groups = {};
+    for (const r of results) {
+      const key = `${r.action}__${r.category}`;
+      if (!groups[key]) groups[key] = { action: r.action, category: r.category, level: r.level, items: [] };
+      groups[key].items.push(r);
+    }
+    // Sort: NEGATIVE red first, NEGATIVE amber, MONITOR, KEEP
+    const order = { 'NEGATIVE__red': 0, 'NEGATIVE__amber': 1, 'MONITOR__amber': 2, 'KEEP__green': 3, 'MONITOR__grey': 4 };
+    return Object.values(groups).sort((a, b) => {
+      const ka = `${a.action}__${a.level}`;
+      const kb = `${b.action}__${b.level}`;
+      return (order[ka] ?? 5) - (order[kb] ?? 5);
+    });
+  }
+
+  /* ---- Render results ---- */
+  function renderResults({ results, totalCost }) {
+    const negatives = results.filter(r => r.action === 'NEGATIVE');
+    const monitors  = results.filter(r => r.action === 'MONITOR');
+    const keeps     = results.filter(r => r.action === 'KEEP');
+    const flaggedSpend = negatives.reduce((a, r) => a + r.cost, 0);
+
+    document.getElementById('nka-summary').innerHTML = `
+      <div class="nka-stat"><div class="nka-stat-value">${results.length}</div><div class="nka-stat-label">Terms Analysed</div></div>
+      <div class="nka-stat"><div class="nka-stat-value red">${negatives.length}</div><div class="nka-stat-label">Negative Recs</div></div>
+      <div class="nka-stat"><div class="nka-stat-value amber">${monitors.length}</div><div class="nka-stat-label">Monitor</div></div>
+      <div class="nka-stat"><div class="nka-stat-value green">${fmt$(flaggedSpend)}</div><div class="nka-stat-label">Flagged Spend</div></div>
+    `;
+
+    const groups = groupResults(results);
+    const emojiMap = { red: '🔴', amber: '🟠', green: '🟢', grey: '⚪' };
+    const actionLabel = { NEGATIVE: 'Negative', MONITOR: 'Monitor', KEEP: 'Keep' };
+
+    document.getElementById('nka-groups').innerHTML = groups.map((g, gi) => {
+      const groupSpend = g.items.reduce((a, r) => a + r.cost, 0);
+      const negItems   = g.items.filter(r => r.action === 'NEGATIVE');
+      const copyList   = negItems.map(r => fmtMatch(r.term, r.matchType || 'PHRASE')).join('\n');
+
+      const rows = g.items.map(r => `
+        <tr>
+          <td>${r.term}</td>
+          <td>${r.clicks || '—'}</td>
+          <td>${r.cost > 0 ? fmt$(r.cost) : '—'}</td>
+          <td>${r.conv  > 0 ? r.conv : '—'}</td>
+          <td><span class="nka-badge ${r.level}">${actionLabel[r.action]}</span></td>
+          <td>${r.matchType ? fmtMatch(r.term, r.matchType) : '—'}</td>
+          <td>${r.negLevel || '—'}</td>
+          <td class="nka-conf">${(r.confidence * 100).toFixed(0)}%</td>
+          <td style="max-width:200px;font-size:11px;color:var(--text-faint)">${r.rationale}</td>
+        </tr>`).join('');
+
+      return `
+        <div class="nka-group">
+          <div class="nka-group-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+            <span>${emojiMap[g.level] || '⚪'}</span>
+            <span class="nka-group-title">${g.category} (${g.items.length} terms${groupSpend > 0 ? ', ' + fmt$(groupSpend) + ' spend' : ''})</span>
+            <span class="nka-group-meta">${g.action}</span>
+          </div>
+          <div class="nka-group-body" style="display:${gi < 3 ? 'block' : 'none'}">
+            <div class="table-wrap"><table class="nka-term-table">
+              <thead><tr><th>Search Term</th><th>Clicks</th><th>Cost</th><th>Conv</th><th>Action</th><th>Negative</th><th>Level</th><th>Conf.</th><th>Rationale</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></div>
+            ${copyList ? `<div class="nka-copy-block"><button class="nka-copy-btn" onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button><pre>${copyList}</pre></div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('nka-context').style.display = 'none';
+    document.getElementById('nka-results').style.display  = '';
+
+    // Copy all negatives
+    const allNeg = results.filter(r => r.action === 'NEGATIVE').map(r => fmtMatch(r.term, r.matchType || 'PHRASE')).join('\n');
+    document.getElementById('nka-copy-all-btn').onclick = () => {
+      navigator.clipboard.writeText(allNeg).then(() => {
+        const btn = document.getElementById('nka-copy-all-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy All Negatives', 1500);
+      });
+    };
+  }
+
+  /* ---- Wire up UI ---- */
+  let nkaVisible = false;
+  let rawData    = '';
+
+  function toggleNka() {
+    nkaVisible = !nkaVisible;
+    document.getElementById('nka-panel').style.display = nkaVisible ? '' : 'none';
+  }
+
+  document.getElementById('nka-toggle-btn').addEventListener('click', toggleNka);
+
+  // Hide panel when switching platform
+  const origUpdate = window._nkaOrigUpdate;
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      nkaVisible = false;
+      document.getElementById('nka-panel').style.display = 'none';
+    });
+  });
+
+  // Dropzone
+  const dropzone = document.getElementById('nka-dropzone');
+  const fileInput = document.getElementById('nka-file');
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault(); dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) { const r = new FileReader(); r.onload = ev => { rawData = ev.target.result; document.getElementById('nka-paste').value = rawData; }; r.readAsText(file); }
+  });
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) { const r = new FileReader(); r.onload = ev => { rawData = ev.target.result; document.getElementById('nka-paste').value = rawData; }; r.readAsText(file); }
+  });
+
+  // Sample CSV
+  document.getElementById('nka-sample-btn').addEventListener('click', () => {
+    const sample = `Search term,Clicks,Cost,Conversions,Impressions
+google ads management services,45,180.50,3,620
+how to run google ads,22,88.00,0,310
+google ads jobs sydney,18,72.00,0,240
+google ads tutorial free,15,60.00,0,200
+best google ads agency near me,12,48.00,1,180
+google ads login,10,40.00,0,150
+competitor agency name,9,36.00,0,130
+google ads salary australia,8,32.00,0,120
+google ads template pdf,7,28.00,0,105
+ppc management cost,6,24.00,0,90
+google ads training course,5,20.00,0,75
+cheap google ads,4,16.00,0,60
+google ads vs facebook ads,3,12.00,0,45
+do it yourself google ads,3,12.00,0,45
+google ads certification exam,2,8.00,0,30`;
+    const blob = new Blob([sample], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'search-terms-sample.csv'; a.click();
+  });
+
+  // Analyze
+  document.getElementById('nka-analyze-btn').addEventListener('click', () => {
+    const paste = document.getElementById('nka-paste').value.trim();
+    const data  = paste || rawData;
+    if (!data) { alert('Please upload a CSV or paste search term data first.'); return; }
+    const service = document.getElementById('nka-service').value.trim();
+    if (!service) { alert('Please enter your primary service keywords.'); return; }
+    try {
+      const rows = parseSearchTerms(data);
+      if (rows.length === 0) throw new Error('No rows found. Check your CSV format.');
+      const opts = {
+        service:      service,
+        brand:        document.getElementById('nka-brand').value,
+        servicesAll:  document.getElementById('nka-services-all').value,
+        compStrategy: document.getElementById('nka-competitor-strategy').value,
+      };
+      const analysis = analyze(rows, opts);
+      renderResults(analysis);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  });
+
+  // Reset
+  document.getElementById('nka-reset-btn').addEventListener('click', () => {
+    rawData = '';
+    document.getElementById('nka-paste').value = '';
+    document.getElementById('nka-file').value  = '';
+    document.getElementById('nka-context').style.display = '';
+    document.getElementById('nka-results').style.display  = 'none';
+  });
+
+})();
 
 /* ── Event listeners ────────────────────────────────────── */
 document.querySelectorAll('.nav-item').forEach(btn => {
