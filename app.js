@@ -1392,114 +1392,6 @@ function renderLeadsView() {
   };
 }
 
-/* ── Google Ads Analysis ────────────────────────────────── */
-function renderAnalysis() {
-  const el = document.getElementById('gads-analysis');
-  if (platform !== 'gads') { el.style.display = 'none'; return; }
-  el.style.display = '';
-
-  const campaigns = gadsApiCampaigns.length > 0 ? gadsApiCampaigns : [];
-  const daily     = gadsApiDaily.length     > 0 ? gadsApiDaily     : [];
-
-  if (campaigns.length === 0 && daily.length === 0) {
-    document.getElementById('analysis-insights').innerHTML =
-      '<div class="analysis-empty">No data available for analysis.</div>';
-    return;
-  }
-
-  const insights = [];
-
-  const totalSpend = campaigns.reduce((a, c) => a + c.spend, 0);
-  const totalRev   = campaigns.reduce((a, c) => a + c.revenue, 0);
-  const totalConv  = campaigns.reduce((a, c) => a + c.conv, 0);
-  const totalClicks= campaigns.reduce((a, c) => a + (c.clicks || 0), 0);
-  const totalImpr  = campaigns.reduce((a, c) => a + (c.impressions || 0), 0);
-  const overallRoas = totalSpend > 0 ? totalRev / totalSpend : 0;
-  const overallCtr  = totalImpr  > 0 ? (totalClicks / totalImpr) * 100 : 0;
-
-  /* 1 — Low overall ROAS */
-  if (totalSpend > 0) {
-    if (overallRoas < 2) {
-      insights.push({ level: 'red', icon: '📉', title: 'Low overall ROAS', desc: `Your blended ROAS is ${overallRoas.toFixed(2)}x — well below the recommended 3x minimum. Review bidding strategies and landing page conversion rates.`, meta: overallRoas.toFixed(2) + 'x' });
-    } else if (overallRoas < 3) {
-      insights.push({ level: 'amber', icon: '⚠️', title: 'ROAS below target', desc: `Blended ROAS of ${overallRoas.toFixed(2)}x is under the 3x target. Consider pausing low-performing campaigns and reallocating budget.`, meta: overallRoas.toFixed(2) + 'x' });
-    } else {
-      insights.push({ level: 'green', icon: '✅', title: 'Healthy ROAS', desc: `Blended ROAS of ${overallRoas.toFixed(2)}x is above the 3x target. Good overall return on ad spend.`, meta: overallRoas.toFixed(2) + 'x' });
-    }
-  }
-
-  /* 2 — Low CTR */
-  if (totalImpr > 0) {
-    if (overallCtr < 2) {
-      insights.push({ level: 'red', icon: '👆', title: 'Low click-through rate', desc: `CTR of ${overallCtr.toFixed(2)}% is below the 2% benchmark. Ad copy or targeting may need improvement — test new headlines and audiences.`, meta: overallCtr.toFixed(2) + '%' });
-    } else if (overallCtr < 5) {
-      insights.push({ level: 'amber', icon: '👆', title: 'CTR could be improved', desc: `CTR of ${overallCtr.toFixed(2)}% is average. A/B testing ad copy and refining keyword match types could push this higher.`, meta: overallCtr.toFixed(2) + '%' });
-    }
-  }
-
-  /* 3 — Budget concentration */
-  if (campaigns.length > 1 && totalSpend > 0) {
-    const top = campaigns.slice().sort((a, b) => b.spend - a.spend)[0];
-    const topPct = (top.spend / totalSpend) * 100;
-    if (topPct > 70) {
-      insights.push({ level: 'amber', icon: '💰', title: 'Budget over-concentrated', desc: `"${top.name}" is consuming ${topPct.toFixed(0)}% of total spend. Diversifying budget across campaigns reduces risk and can unlock new audiences.`, meta: topPct.toFixed(0) + '%' });
-    }
-  }
-
-  /* 4 — High CPA campaigns */
-  const avgCpa = totalConv > 0 ? totalSpend / totalConv : 0;
-  const badCpa = campaigns.filter(c => c.conv > 0 && c.spend / c.conv > avgCpa * 2);
-  if (badCpa.length > 0) {
-    insights.push({ level: 'red', icon: '💸', title: `${badCpa.length} campaign${badCpa.length > 1 ? 's' : ''} with high CPA`, desc: `${badCpa.map(c => '"' + c.name + '"').join(', ')} ${badCpa.length > 1 ? 'have' : 'has'} a CPA more than 2× the account average (${fmt$(avgCpa)}). Review ad relevance, landing pages, and bids.`, meta: '2× avg' });
-  }
-
-  /* 5 — Paused campaigns with past spend */
-  const pausedWithSpend = campaigns.filter(c => c.status === 'paused' && c.spend > 0);
-  if (pausedWithSpend.length > 0) {
-    insights.push({ level: 'amber', icon: '⏸️', title: `${pausedWithSpend.length} paused campaign${pausedWithSpend.length > 1 ? 's' : ''} with spend`, desc: `${pausedWithSpend.map(c => '"' + c.name + '"').join(', ')} ${pausedWithSpend.length > 1 ? 'are' : 'is'} paused but recorded spend in the period. Review if these should be reactivated or their budgets reallocated.`, meta: fmt$(pausedWithSpend.reduce((a, c) => a + c.spend, 0)) });
-  }
-
-  /* 6 — Zero-conversion campaigns */
-  const zeroCv = campaigns.filter(c => c.spend > 50 && c.conv === 0);
-  if (zeroCv.length > 0) {
-    insights.push({ level: 'red', icon: '🚫', title: `${zeroCv.length} campaign${zeroCv.length > 1 ? 's' : ''} with no conversions`, desc: `${zeroCv.map(c => '"' + c.name + '"').join(', ')} spent ${fmt$(zeroCv.reduce((a, c) => a + c.spend, 0))} with zero conversions. Check conversion tracking, landing pages, and audience targeting.`, meta: 'No conv.' });
-  }
-
-  /* 7 — Spend trending down */
-  if (daily.length >= 6) {
-    const half = Math.floor(daily.length / 2);
-    const firstHalf  = daily.slice(0, half).reduce((a, d) => a + d.gads_spend, 0) / half;
-    const secondHalf = daily.slice(-half).reduce((a, d) => a + d.gads_spend, 0) / half;
-    const change = firstHalf > 0 ? ((secondHalf - firstHalf) / firstHalf) * 100 : 0;
-    if (change < -20) {
-      insights.push({ level: 'amber', icon: '📊', title: 'Spend declining', desc: `Daily spend dropped ${Math.abs(change).toFixed(0)}% in the second half of the period. Check for budget caps, disapproved ads, or audience fatigue.`, meta: change.toFixed(0) + '%' });
-    }
-  }
-
-  const svgMap = {
-    '📉': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>',
-    '⚠️': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-    '✅': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
-    '👆': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
-    '💰': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-    '💸': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
-    '⏸️': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
-    '🚫': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
-    '📊': '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
-  };
-
-  document.getElementById('analysis-insights').innerHTML = insights.length === 0
-    ? '<div class="analysis-empty">All campaigns look healthy — no issues detected.</div>'
-    : insights.map(i => `
-      <div class="insight-row">
-        <div class="insight-icon ${i.level}">${svgMap[i.icon] || ''}</div>
-        <div class="insight-body">
-          <div class="insight-title">${i.title}</div>
-          <div class="insight-desc">${i.desc}</div>
-        </div>
-        <div class="insight-meta ${i.level}">${i.meta}</div>
-      </div>`).join('');
-}
 
 /* ── Overview data builder ──────────────────────────────── */
 function buildOverviewData(gadsDaily, fbDaily, gaDaily) {
@@ -1639,7 +1531,6 @@ async function update() {
     document.querySelector('.charts-top').style.display = 'none';
     document.querySelector('.charts-bottom').style.display = 'none';
     document.querySelector('.table-card').style.display = 'none';
-    document.getElementById('gads-analysis').style.display = 'none';
     return;
   }
 
@@ -1651,11 +1542,10 @@ async function update() {
           : platform === 'all' && overviewGadsDaily.length > 0
             ? buildOverviewData(overviewGadsDaily, fbApiDaily, overviewGaDaily)
           : slice();
-  if (platform === 'email' && s.length === 0) { renderKPIs([]); renderCharts([]); renderTable(); renderAnalysis(); return; }
+  if (platform === 'email' && s.length === 0) { renderKPIs([]); renderCharts([]); renderTable(); return; }
   renderKPIs(s);
   renderCharts(s);
   renderTable();
-  renderAnalysis();
 }
 
 /* ── Negative Keyword Analyzer ──────────────────────────── */
