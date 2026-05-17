@@ -1320,7 +1320,8 @@ function renderHeader() {
   const m = PLATFORM_META[platform];
   document.getElementById('page-title').textContent    = m.title;
   document.getElementById('page-subtitle').textContent =
-    (platform === 'gads' && gadsSubView === 'keyword-analyzer') ? 'Negative Keyword Analyzer'
+    (platform === 'gads' && gadsSubView === 'analysis')         ? 'Campaign-level insights & recommendations'
+  : (platform === 'gads' && gadsSubView === 'keyword-analyzer') ? 'Negative Keyword Analyzer'
   : m.sub;
   document.getElementById('brand-select').style.display    = (platform === 'gads' || platform === 'ga') ? '' : 'none';
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
@@ -1393,6 +1394,147 @@ function renderLeadsView() {
   };
 }
 
+
+/* ── Campaign Analysis ──────────────────────────────────── */
+function renderCampaignAnalysis() {
+  const el = document.getElementById('gads-analysis-cards');
+  const campaigns = gadsApiCampaigns;
+
+  if (campaigns.length === 0) {
+    el.innerHTML = '<div class="ca-empty">No campaign data available. Select an account and date range first.</div>';
+    return;
+  }
+
+  const totalSpend = campaigns.reduce((a, c) => a + c.spend, 0);
+  const totalConv  = campaigns.reduce((a, c) => a + c.conv,  0);
+  const totalImpr  = campaigns.reduce((a, c) => a + c.impressions, 0);
+  const totalClicks= campaigns.reduce((a, c) => a + c.clicks, 0);
+  const acctCpa    = totalConv  > 0 ? totalSpend / totalConv : 0;
+  const acctCtr    = totalImpr  > 0 ? (totalClicks / totalImpr) * 100 : 0;
+
+  el.innerHTML = campaigns.map(c => {
+    const roas = c.spend > 0 && c.revenue > 0 ? c.revenue / c.spend : 0;
+    const ctr  = c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
+    const cpa  = c.conv  > 0 ? c.spend / c.conv  : 0;
+    const cpc  = c.clicks > 0 ? c.spend / c.clicks : 0;
+    const cvr  = c.clicks > 0 ? (c.conv / c.clicks) * 100 : 0;
+
+    const issues = [];
+    const recs   = [];
+
+    // Zero conversions with spend
+    if (c.spend > 50 && c.conv === 0) {
+      issues.push({ level: 'red', title: 'Zero conversions', detail: `Spent ${fmt$(c.spend)} with no conversions recorded.` });
+      recs.push('Verify conversion tracking tags are firing on the thank-you page', 'Review landing page — ensure it loads fast and matches ad intent', 'Narrow keyword match types to phrase or exact to filter irrelevant searches', 'Check for disapproved ads inside this campaign', 'Add negative keywords to block unrelated traffic');
+    }
+
+    // ROAS check
+    if (c.spend > 0 && c.revenue > 0) {
+      if (roas < 1) {
+        issues.push({ level: 'red', title: `Negative ROAS — ${roas.toFixed(2)}x`, detail: 'Spending more than the revenue generated.' });
+        recs.push('Pause or significantly reduce budget until root cause is found', 'Review bid strategy — switch to Manual CPC to control spend', 'Identify and pause the highest-spend, lowest-conversion ad groups');
+      } else if (roas < 2) {
+        issues.push({ level: 'amber', title: `Low ROAS — ${roas.toFixed(2)}x`, detail: 'Below the recommended 2x minimum for profitable campaigns.' });
+        recs.push('Increase bids on keywords that have historically converted', 'Improve landing page conversion rate with clearer CTA and trust signals', 'Test Target ROAS bidding if enough conversion history exists (30+ conversions/month)', 'Pause ad groups with highest spend and lowest ROAS');
+      }
+    } else if (c.spend > 0 && c.revenue === 0) {
+      if (c.conv === 0) {
+        // already handled above
+      }
+    }
+
+    // CTR check
+    if (c.impressions >= 200) {
+      if (ctr < 0.5) {
+        issues.push({ level: 'red', title: `Very low CTR — ${ctr.toFixed(2)}%`, detail: `Account average is ${acctCtr.toFixed(2)}%. Ads are not compelling enough to earn clicks.` });
+        recs.push('Rewrite headlines — lead with a strong benefit or unique selling point', 'Use all available ad extensions (sitelinks, callouts, structured snippets, call)', 'Ensure keywords tightly match the ad copy — improve ad relevance', 'Check Quality Score; low relevance scores cap ad delivery');
+      } else if (ctr < 2) {
+        issues.push({ level: 'amber', title: `Low CTR — ${ctr.toFixed(2)}%`, detail: `Below the 2% benchmark. Room to improve ad engagement.` });
+        recs.push('A/B test at least 3 headline variations per ad group', 'Add promotion extensions if running offers or discounts', 'Use dynamic keyword insertion carefully to boost relevance');
+      }
+    }
+
+    // CPA vs account average
+    if (c.conv > 0 && acctCpa > 0) {
+      if (cpa > acctCpa * 3) {
+        issues.push({ level: 'red', title: `Very high CPA — ${fmt$(cpa)}`, detail: `3× the account average of ${fmt$(acctCpa)}. This campaign is expensive relative to results.` });
+        recs.push('Significantly reduce bids or daily budget on this campaign', 'Identify and pause the most expensive keywords with zero or low conversions', 'Run a search terms report and add negatives to filter irrelevant traffic', 'Consider restructuring ad groups around tighter keyword themes');
+      } else if (cpa > acctCpa * 1.5) {
+        issues.push({ level: 'amber', title: `Above-average CPA — ${fmt$(cpa)}`, detail: `1.5× the account average of ${fmt$(acctCpa)}.` });
+        recs.push('Reduce bids on keywords with high CPA and low conversion volume', 'Test landing page variants to improve conversion rate', 'Review audience bid adjustments — exclude poor-performing segments');
+      }
+    }
+
+    // Low conversion rate (enough clicks, low CVR)
+    if (c.clicks >= 50 && cvr < 1 && c.conv > 0) {
+      issues.push({ level: 'amber', title: `Low conversion rate — ${cvr.toFixed(2)}%`, detail: 'Clicks are not converting well. Landing page or offer may need improvement.' });
+      recs.push('Run a heatmap or session recording on the landing page', 'Simplify the conversion form — reduce required fields', 'Add social proof (reviews, case studies, trust badges)', 'Ensure page load time is under 3 seconds on mobile');
+    }
+
+    // Low impressions with spend
+    if (c.spend > 0 && c.impressions < 200) {
+      issues.push({ level: 'amber', title: 'Low impressions — limited reach', detail: 'Campaign may be restricted by budget, bids, or targeting.' });
+      recs.push('Check if campaign is limited by budget — increase daily cap if so', 'Review keyword bids — may be too low to win auctions', 'Broaden targeting: expand geo, add broad match keywords', 'Check ad scheduling — may be missing peak hours');
+    }
+
+    // Paused with spend
+    if (c.status === 'paused' && c.spend > 0) {
+      issues.push({ level: 'amber', title: 'Paused with recorded spend', detail: 'Campaign was paused but recorded spend in the selected period.' });
+      recs.push('Confirm the pause is intentional and not accidental', 'Before reactivating, review performance in the period it was active', 'If reactivating, reset bids and monitor closely for the first 48 hours');
+    }
+
+    const hasIssues = issues.length > 0;
+    const worstLevel = issues.some(i => i.level === 'red') ? 'red' : issues.some(i => i.level === 'amber') ? 'amber' : 'green';
+    const statusColor = c.status === 'active' ? 'green' : 'amber';
+
+    const metricsHtml = `
+      <div class="ca-metrics">
+        <div class="ca-metric"><span class="ca-metric-val">${fmt$(c.spend)}</span><span class="ca-metric-lbl">Spend</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${fmtN(c.impressions)}</span><span class="ca-metric-lbl">Impressions</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${fmtN(c.clicks)}</span><span class="ca-metric-lbl">Clicks</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${c.conv > 0 ? fmtN(c.conv) : '—'}</span><span class="ca-metric-lbl">Conv.</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${ctr > 0 ? ctr.toFixed(2) + '%' : '—'}</span><span class="ca-metric-lbl">CTR</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${roas > 0 ? roas.toFixed(2) + 'x' : '—'}</span><span class="ca-metric-lbl">ROAS</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${cpa > 0 ? fmt$(cpa) : '—'}</span><span class="ca-metric-lbl">CPA</span></div>
+        <div class="ca-metric"><span class="ca-metric-val">${cpc > 0 ? fmt$(cpc) : '—'}</span><span class="ca-metric-lbl">CPC</span></div>
+      </div>`;
+
+    const issuesHtml = hasIssues
+      ? `<div class="ca-section-title">Issues Found</div>
+         <div class="ca-issues">
+           ${issues.map(i => `
+             <div class="ca-issue ca-issue--${i.level}">
+               <div class="ca-issue-dot ca-issue-dot--${i.level}"></div>
+               <div><div class="ca-issue-title">${i.title}</div><div class="ca-issue-detail">${i.detail}</div></div>
+             </div>`).join('')}
+         </div>`
+      : '';
+
+    const allRecs = [...new Set(recs)];
+    const recsHtml = allRecs.length > 0
+      ? `<div class="ca-section-title">Recommendations</div>
+         <ol class="ca-recs">
+           ${allRecs.map(r => `<li>${r}</li>`).join('')}
+         </ol>`
+      : '';
+
+    const healthyHtml = !hasIssues
+      ? `<div class="ca-healthy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> No issues detected — campaign looks healthy</div>`
+      : '';
+
+    return `
+      <div class="ca-card ca-card--${worstLevel}">
+        <div class="ca-header">
+          <div class="ca-name">${c.name}</div>
+          <span class="ca-status ca-status--${statusColor}">${c.status}</span>
+        </div>
+        ${metricsHtml}
+        ${issuesHtml}
+        ${recsHtml}
+        ${healthyHtml}
+      </div>`;
+  }).join('');
+}
 
 /* ── Overview data builder ──────────────────────────────── */
 function buildOverviewData(gadsDaily, fbDaily, gaDaily) {
@@ -1525,8 +1667,10 @@ async function update() {
   if (platform === 'leads') return;
 
   // Google Ads sub-views
+  const isGadsAnalysis  = platform === 'gads' && gadsSubView === 'analysis';
   const isGadsKeywords  = platform === 'gads' && gadsSubView === 'keyword-analyzer';
-  const isGadsSubView   = isGadsKeywords;
+  const isGadsSubView   = isGadsAnalysis || isGadsKeywords;
+  document.getElementById('gads-analysis-panel').style.display    = isGadsAnalysis ? '' : 'none';
   document.getElementById('nka-panel').style.display              = isGadsKeywords ? '' : 'none';
   document.getElementById('keyword-analyzer-panel').style.display = 'none';
   if (isGadsSubView) {
@@ -1534,6 +1678,7 @@ async function update() {
     document.querySelector('.charts-top').style.display = 'none';
     document.querySelector('.charts-bottom').style.display = 'none';
     document.querySelector('.table-card').style.display = 'none';
+    if (isGadsAnalysis) renderCampaignAnalysis();
     return;
   }
 
