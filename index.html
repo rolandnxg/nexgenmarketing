@@ -411,28 +411,6 @@
     </div>
   </div>
 
-  <!-- AI Agent Widget -->
-  <div id="ai-agent-widget" class="ai-widget">
-    <div id="ai-agent-panel" class="ai-widget-panel" style="display:none">
-      <div class="ai-widget-header">
-        <div class="ai-widget-title">
-          <div class="ai-widget-dot"></div>
-          Google Ads AI Agent
-        </div>
-        <button class="ai-widget-close" id="ai-agent-close">&times;</button>
-      </div>
-      <iframe
-        src="https://ads-agent-production-cd60.up.railway.app/widget"
-        title="Ads AI Agent"
-        class="ai-widget-iframe"
-      ></iframe>
-    </div>
-    <button class="ai-widget-fab" id="ai-agent-toggle" title="Ads AI Agent">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>
-      <span>AI Agent</span>
-    </button>
-  </div>
-
   <!-- EDM Create/Edit modal -->
   <div id="edm-modal" class="edm-modal" style="display:none">
     <div class="edm-backdrop" id="edm-backdrop"></div>
@@ -547,17 +525,44 @@
     </div>
   </div>
 
+
+  <!-- AI Agent Widget -->
+  <div id="ai-agent-widget">
+    <button id="ai-agent-toggle" class="ai-agent-toggle" title="Ads AI Agent">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+  </div>
+
   <script>
-    document.getElementById('ai-agent-toggle').addEventListener('click', function() {
-      var panel = document.getElementById('ai-agent-panel');
-      var open  = panel.style.display !== 'none';
-      panel.style.display = open ? 'none' : 'flex';
-      this.classList.toggle('active', !open);
-    });
-    document.getElementById('ai-agent-close').addEventListener('click', function() {
-      document.getElementById('ai-agent-panel').style.display = 'none';
-      document.getElementById('ai-agent-toggle').classList.remove('active');
-    });
+    (function () {
+      const AGENT_URL = 'https://ads-agent-production-cd60.up.railway.app';
+      const toggle = document.getElementById('ai-agent-toggle');
+      let agentWin = null;
+
+      toggle.addEventListener('click', function () {
+        if (agentWin && !agentWin.closed) {
+          agentWin.focus();
+          return;
+        }
+        const w = 480, h = 700;
+        const left = window.screenX + window.outerWidth - w - 40;
+        const top  = window.screenY + window.outerHeight - h - 60;
+        agentWin = window.open(
+          AGENT_URL,
+          'ads-ai-agent',
+          'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
+          ',resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
+        );
+        toggle.classList.add('active');
+        const timer = setInterval(function () {
+          if (agentWin && agentWin.closed) {
+            clearInterval(timer);
+            toggle.classList.remove('active');
+          }
+        }, 500);
+      });
+    })();
   </script>
+
 </body>
 </html>
