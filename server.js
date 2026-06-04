@@ -390,22 +390,30 @@ app.get('/api/ga/pages', async (req, res) => {
   }
 });
 
-/* ── GA OAuth setup flow ─────────────────────────────────── */
-const GA_OAUTH_REDIRECT = `http://localhost:${process.env.PORT || 3000}/auth/ga/callback`;
-const GA_SCOPE = 'https://www.googleapis.com/auth/analytics.readonly';
+/* ── Google OAuth setup flow (GA + GAdS combined) ────────── */
+const GOOGLE_OAUTH_REDIRECT = process.env.GOOGLE_OAUTH_REDIRECT ||
+  `http://localhost:${process.env.PORT || 3000}/auth/google/callback`;
 
-app.get('/auth/ga', (req, res) => {
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/analytics.readonly',
+  'https://www.googleapis.com/auth/adwords',
+].join(' ');
+
+app.get('/auth/google', (req, res) => {
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   url.searchParams.set('client_id',     gaOauth.clientId);
-  url.searchParams.set('redirect_uri',  GA_OAUTH_REDIRECT);
+  url.searchParams.set('redirect_uri',  GOOGLE_OAUTH_REDIRECT);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope',         GA_SCOPE);
+  url.searchParams.set('scope',         GOOGLE_SCOPES);
   url.searchParams.set('access_type',   'offline');
   url.searchParams.set('prompt',        'consent');
   res.redirect(url.toString());
 });
 
-app.get('/auth/ga/callback', async (req, res) => {
+/* Keep old /auth/ga path working as an alias */
+app.get('/auth/ga', (req, res) => res.redirect('/auth/google'));
+
+app.get('/auth/google/callback', async (req, res) => {
   const { code, error } = req.query;
   if (error) return res.send(`<h2>Auth error: ${error}</h2>`);
   try {
@@ -416,32 +424,51 @@ app.get('/auth/ga/callback', async (req, res) => {
         code,
         client_id:     gaOauth.clientId,
         client_secret: gaOauth.clientSecret,
-        redirect_uri:  GA_OAUTH_REDIRECT,
+        redirect_uri:  GOOGLE_OAUTH_REDIRECT,
         grant_type:    'authorization_code',
       }),
     });
     const data = await resp.json();
     if (data.error) return res.send(`<h2>Token error: ${data.error_description || data.error}</h2>`);
 
-    /* Save refresh token to .env */
+    const token = data.refresh_token;
+
+    /* Update .env */
     const envPath = path.join(__dirname, '.env');
     let envContent = fs.readFileSync(envPath, 'utf8');
-    if (envContent.includes('GA_REFRESH_TOKEN=')) {
-      envContent = envContent.replace(/GA_REFRESH_TOKEN=.*/,  `GA_REFRESH_TOKEN=${data.refresh_token}`);
-    } else {
-      envContent += `\nGA_REFRESH_TOKEN=${data.refresh_token}`;
-    }
+    const setEnvVar = (content, key, val) =>
+      content.includes(`${key}=`)
+        ? content.replace(new RegExp(`${key}=.*`), `${key}=${val}`)
+        : content + `\n${key}=${val}`;
+    envContent = setEnvVar(envContent, 'GADS_REFRESH_TOKEN', token);
+    envContent = setEnvVar(envContent, 'GA_REFRESH_TOKEN',   token);
     fs.writeFileSync(envPath, envContent);
 
-    /* Update in-memory so server works immediately without restart */
-    gaOauth.refreshToken = data.refresh_token;
-    _gaAccessToken = data.access_token;
-    _gaTokenExpiry  = Date.now() + (data.expires_in || 3600) * 1000;
+    /* Update in-memory — both services share the same token */
+    oauth.refreshToken    = token;
+    gaOauth.refreshToken  = token;
+    _accessToken          = data.access_token;
+    _tokenExpiry          = Date.now() + (data.expires_in || 3600) * 1000;
+    _gaAccessToken        = data.access_token;
+    _gaTokenExpiry        = Date.now() + (data.expires_in || 3600) * 1000;
 
-    res.send(`<h2 style="font-family:sans-serif;color:green">✓ Google Analytics connected!</h2><p>Refresh token saved. You can close this tab.</p>`);
+    res.send(`
+      <h2 style="font-family:sans-serif;color:green">✓ Google connected (GA + GAdS)!</h2>
+      <p>Refresh token saved. Copy the token below and update your Railway variables:</p>
+      <pre style="background:#f4f4f4;padding:12px;word-break:break-all">${token}</pre>
+      <p style="font-family:sans-serif;font-size:13px;color:#555">
+        Set both <strong>GADS_REFRESH_TOKEN</strong> and <strong>GA_REFRESH_TOKEN</strong>
+        in Railway to this value, then redeploy.
+      </p>
+    `);
   } catch (err) {
     res.send(`<h2>Error: ${err.message}</h2>`);
   }
+});
+
+/* Keep old callback path working */
+app.get('/auth/ga/callback', (req, res) => {
+  res.redirect('/auth/google/callback?' + new URLSearchParams(req.query));
 });
 
 /* ── Serve config.js from env vars (for hosted deployments) ── */
