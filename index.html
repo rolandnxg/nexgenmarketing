@@ -528,6 +528,27 @@
 
   <!-- AI Agent Widget -->
   <div id="ai-agent-widget">
+    <div id="ai-agent-panel" class="ai-agent-panel hidden">
+      <div class="ai-agent-header">
+        <div class="ai-agent-title">
+          <div class="ai-agent-dot"></div>
+          <span>Ads AI Agent</span>
+        </div>
+        <div class="ai-agent-header-actions">
+          <a href="https://ads-agent-production-cd60.up.railway.app" target="_blank" class="ai-agent-open-btn" title="Open in new tab">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </a>
+          <button id="ai-agent-close" class="ai-agent-close">&times;</button>
+        </div>
+      </div>
+      <iframe
+        id="ai-agent-iframe"
+        src="/agent-proxy"
+        title="Ads AI Agent"
+        allow="clipboard-write"
+        class="ai-agent-iframe"
+      ></iframe>
+    </div>
     <button id="ai-agent-toggle" class="ai-agent-toggle" title="Ads AI Agent">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </button>
@@ -535,31 +556,16 @@
 
   <script>
     (function () {
-      const AGENT_URL = 'https://ads-agent-production-cd60.up.railway.app';
       const toggle = document.getElementById('ai-agent-toggle');
-      let agentWin = null;
-
+      const panel  = document.getElementById('ai-agent-panel');
+      const close  = document.getElementById('ai-agent-close');
       toggle.addEventListener('click', function () {
-        if (agentWin && !agentWin.closed) {
-          agentWin.focus();
-          return;
-        }
-        const w = 480, h = 700;
-        const left = window.screenX + window.outerWidth - w - 40;
-        const top  = window.screenY + window.outerHeight - h - 60;
-        agentWin = window.open(
-          AGENT_URL,
-          'ads-ai-agent',
-          'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
-          ',resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
-        );
-        toggle.classList.add('active');
-        const timer = setInterval(function () {
-          if (agentWin && agentWin.closed) {
-            clearInterval(timer);
-            toggle.classList.remove('active');
-          }
-        }, 500);
+        panel.classList.toggle('hidden');
+        toggle.classList.toggle('active');
+      });
+      close.addEventListener('click', function () {
+        panel.classList.add('hidden');
+        toggle.classList.remove('active');
       });
     })();
   </script>

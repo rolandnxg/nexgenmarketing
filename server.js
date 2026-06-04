@@ -481,6 +481,53 @@ app.get('/config.js', (req, res) => {
   res.send(`const FB_CONFIG = { accountId: '${accountId}', accessToken: '${accessToken}' };`);
 });
 
+/* ── AI Agent reverse proxy (strips X-Frame-Options) ──── */
+const AGENT_ORIGIN = 'https://ads-agent-production-cd60.up.railway.app';
+const STRIPPED_HEADERS = ['x-frame-options', 'content-security-policy', 'content-security-policy-report-only'];
+
+app.use('/agent-proxy', async (req, res) => {
+  const targetPath = req.url || '/';
+  const targetUrl  = AGENT_ORIGIN + targetPath;
+  try {
+    const upstream = await fetch(targetUrl, {
+      method:  req.method,
+      headers: {
+        'host':            'ads-agent-production-cd60.up.railway.app',
+        'accept':          req.headers['accept']          || '*/*',
+        'accept-encoding': req.headers['accept-encoding'] || 'identity',
+        'accept-language': req.headers['accept-language'] || 'en',
+        'content-type':    req.headers['content-type']    || '',
+        'user-agent':      req.headers['user-agent']      || '',
+      },
+      body: ['GET','HEAD'].includes(req.method) ? undefined : req,
+      redirect: 'follow',
+    });
+
+    const contentType = upstream.headers.get('content-type') || '';
+    upstream.headers.forEach((value, key) => {
+      if (STRIPPED_HEADERS.includes(key.toLowerCase())) return;
+      if (key.toLowerCase() === 'location') {
+        res.setHeader(key, value.replace(AGENT_ORIGIN, '/agent-proxy'));
+        return;
+      }
+      res.setHeader(key, value);
+    });
+    res.status(upstream.status);
+
+    if (contentType.includes('text/html')) {
+      let html = await upstream.text();
+      // Rewrite absolute URLs to go through the proxy
+      html = html.replace(/https:\/\/ads-agent-production-cd60\.up\.railway\.app/g, '/agent-proxy');
+      res.send(html);
+    } else {
+      upstream.body.pipe(res);
+    }
+  } catch (err) {
+    console.error('[Agent proxy]', err.message);
+    res.status(502).send('Agent proxy error: ' + err.message);
+  }
+});
+
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
