@@ -516,9 +516,17 @@ app.use('/agent-proxy', async (req, res) => {
 
     if (contentType.includes('text/html')) {
       let html = await upstream.text();
-      // Rewrite absolute URLs to go through the proxy
+      // Rewrite absolute origin URLs
       html = html.replace(/https:\/\/ads-agent-production-cd60\.up\.railway\.app/g, '/agent-proxy');
+      // Rewrite root-relative asset paths (src="/..." href="/...") to go through proxy
+      html = html.replace(/(src|href|action)="\/(?!agent-proxy)([^"])/g, '$1="/agent-proxy/$2');
+      // Inject base tag so relative paths resolve under /agent-proxy/
+      html = html.replace(/<head([^>]*)>/, '<head$1><base href="/agent-proxy/">');
       res.send(html);
+    } else if (contentType.includes('text/css') || contentType.includes('javascript')) {
+      let text = await upstream.text();
+      text = text.replace(/https:\/\/ads-agent-production-cd60\.up\.railway\.app/g, '/agent-proxy');
+      res.send(text);
     } else {
       upstream.body.pipe(res);
     }
