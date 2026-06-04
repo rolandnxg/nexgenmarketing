@@ -547,7 +547,7 @@ Use light markdown (bold, bullet points, short paragraphs). Be concise — under
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        model:      'gpt-4o-mini',
+        model:      'gpt-4o',
         max_tokens: 1024,
         messages,
       }),
