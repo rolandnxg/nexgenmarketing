@@ -433,16 +433,18 @@ app.get('/auth/google/callback', async (req, res) => {
 
     const token = data.refresh_token;
 
-    /* Update .env */
+    /* Update .env if it exists (local dev only — Railway uses env vars) */
     const envPath = path.join(__dirname, '.env');
-    let envContent = fs.readFileSync(envPath, 'utf8');
-    const setEnvVar = (content, key, val) =>
-      content.includes(`${key}=`)
-        ? content.replace(new RegExp(`${key}=.*`), `${key}=${val}`)
-        : content + `\n${key}=${val}`;
-    envContent = setEnvVar(envContent, 'GADS_REFRESH_TOKEN', token);
-    envContent = setEnvVar(envContent, 'GA_REFRESH_TOKEN',   token);
-    fs.writeFileSync(envPath, envContent);
+    if (fs.existsSync(envPath)) {
+      let envContent = fs.readFileSync(envPath, 'utf8');
+      const setEnvVar = (content, key, val) =>
+        content.includes(`${key}=`)
+          ? content.replace(new RegExp(`${key}=.*`), `${key}=${val}`)
+          : content + `\n${key}=${val}`;
+      envContent = setEnvVar(envContent, 'GADS_REFRESH_TOKEN', token);
+      envContent = setEnvVar(envContent, 'GA_REFRESH_TOKEN',   token);
+      fs.writeFileSync(envPath, envContent);
+    }
 
     /* Update in-memory — both services share the same token */
     oauth.refreshToken    = token;
