@@ -526,34 +526,75 @@
   </div>
 
 
-  <!-- AI Agent Widget -->
-  <button id="ai-agent-btn" title="Ads AI Agent" style="
-    position:fixed;bottom:24px;right:24px;z-index:9999;
-    width:52px;height:52px;border-radius:50%;
-    background:#6366f1;border:none;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;
-    color:#fff;box-shadow:0 4px 20px rgba(99,102,241,.5);
-    transition:transform .2s,box-shadow .2s;
-  ">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-  </button>
+  <!-- AI Agent Widget (inline panel) -->
+  <div id="ai-agent-widget">
+    <!-- Slide-up chat panel -->
+    <div id="ai-agent-panel" style="
+      position:fixed;bottom:88px;right:24px;z-index:9998;
+      width:420px;max-width:calc(100vw - 48px);
+      height:640px;max-height:calc(100vh - 120px);
+      background:#fff;border-radius:16px;overflow:hidden;
+      box-shadow:0 20px 48px rgba(15,23,42,.28),0 8px 20px rgba(15,23,42,.16);
+      display:none;flex-direction:column;
+      transform:translateY(12px);opacity:0;
+      transition:transform .2s ease,opacity .2s ease;
+    ">
+      <iframe id="ai-agent-frame" title="Ads AI Agent" loading="lazy"
+        style="border:0;width:100%;height:100%;display:block;"></iframe>
+    </div>
+
+    <!-- Launcher button -->
+    <button id="ai-agent-btn" title="Ads AI Agent" style="
+      position:fixed;bottom:24px;right:24px;z-index:9999;
+      width:52px;height:52px;border-radius:50%;
+      background:#6366f1;border:none;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;box-shadow:0 4px 20px rgba(99,102,241,.5);
+      transition:transform .2s,box-shadow .2s;
+    ">
+      <svg id="ai-agent-icon-chat" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <svg id="ai-agent-icon-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
   <script>
     (function () {
+      var AGENT_URL = 'https://ads-agent-production-cd60.up.railway.app/widget';
       var btn = document.getElementById('ai-agent-btn');
-      var win = null;
-      btn.onmouseenter = function () { btn.style.transform = 'scale(1.1)'; };
+      var panel = document.getElementById('ai-agent-panel');
+      var frame = document.getElementById('ai-agent-frame');
+      var iconChat = document.getElementById('ai-agent-icon-chat');
+      var iconClose = document.getElementById('ai-agent-icon-close');
+      var open = false;
+      var loaded = false;
+
+      btn.onmouseenter = function () { if (!open) btn.style.transform = 'scale(1.1)'; };
       btn.onmouseleave = function () { btn.style.transform = ''; };
-      btn.addEventListener('click', function () {
-        if (win && !win.closed) { win.focus(); return; }
-        var w = 480, h = 700;
-        var left = window.screenX + window.outerWidth - w - 40;
-        var top  = Math.max(0, window.screenY + window.outerHeight - h - 60);
-        win = window.open(
-          'https://ads-agent-production-cd60.up.railway.app',
-          'ads-ai-agent',
-          'width='+w+',height='+h+',left='+left+',top='+top+
-          ',resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
-        );
+
+      function setOpen(next) {
+        open = next;
+        if (open && !loaded) { frame.src = AGENT_URL; loaded = true; }
+        if (open) {
+          panel.style.display = 'flex';
+          // next frame so the transition runs
+          requestAnimationFrame(function () {
+            panel.style.transform = 'translateY(0)';
+            panel.style.opacity = '1';
+          });
+          iconChat.style.display = 'none';
+          iconClose.style.display = 'block';
+          btn.style.transform = '';
+        } else {
+          panel.style.transform = 'translateY(12px)';
+          panel.style.opacity = '0';
+          iconChat.style.display = 'block';
+          iconClose.style.display = 'none';
+          setTimeout(function () { if (!open) panel.style.display = 'none'; }, 200);
+        }
+      }
+
+      btn.addEventListener('click', function () { setOpen(!open); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && open) setOpen(false);
       });
     })();
   </script>
