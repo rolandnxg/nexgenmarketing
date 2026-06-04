@@ -485,24 +485,22 @@ app.get('/config.js', (req, res) => {
 const AGENT_ORIGIN = 'https://ads-agent-production-cd60.up.railway.app';
 const STRIPPED_HEADERS = ['x-frame-options', 'content-security-policy', 'content-security-policy-report-only'];
 
-app.use('/agent-proxy', async (req, res) => {
-  const targetPath = req.url || '/';
-  const targetUrl  = AGENT_ORIGIN + targetPath;
+async function proxyToAgent(req, res, targetPath) {
+  const targetUrl = AGENT_ORIGIN + targetPath;
   try {
     const upstream = await fetch(targetUrl, {
       method:  req.method,
       headers: {
         'host':            'ads-agent-production-cd60.up.railway.app',
         'accept':          req.headers['accept']          || '*/*',
-        'accept-encoding': req.headers['accept-encoding'] || 'identity',
+        'accept-encoding': 'identity',
         'accept-language': req.headers['accept-language'] || 'en',
         'content-type':    req.headers['content-type']    || '',
         'user-agent':      req.headers['user-agent']      || '',
       },
-      body: ['GET','HEAD'].includes(req.method) ? undefined : req,
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : req,
       redirect: 'follow',
     });
-
     const contentType = upstream.headers.get('content-type') || '';
     upstream.headers.forEach((value, key) => {
       if (STRIPPED_HEADERS.includes(key.toLowerCase())) return;
@@ -513,14 +511,10 @@ app.use('/agent-proxy', async (req, res) => {
       res.setHeader(key, value);
     });
     res.status(upstream.status);
-
     if (contentType.includes('text/html')) {
       let html = await upstream.text();
-      // Rewrite absolute origin URLs
       html = html.replace(/https:\/\/ads-agent-production-cd60\.up\.railway\.app/g, '/agent-proxy');
-      // Rewrite root-relative asset paths (src="/..." href="/...") to go through proxy
       html = html.replace(/(src|href|action)="\/(?!agent-proxy)([^"])/g, '$1="/agent-proxy/$2');
-      // Inject base tag so relative paths resolve under /agent-proxy/
       html = html.replace(/<head([^>]*)>/, '<head$1><base href="/agent-proxy/">');
       res.send(html);
     } else if (contentType.includes('text/css') || contentType.includes('javascript')) {
@@ -534,7 +528,12 @@ app.use('/agent-proxy', async (req, res) => {
     console.error('[Agent proxy]', err.message);
     res.status(502).send('Agent proxy error: ' + err.message);
   }
-});
+}
+
+/* /assets/* — Vite bundles reference assets from the root; proxy them to the agent */
+app.use('/assets', (req, res) => proxyToAgent(req, res, '/assets' + req.url));
+
+app.use('/agent-proxy', (req, res) => proxyToAgent(req, res, req.url || '/'));
 
 app.use(express.static(__dirname));
 
