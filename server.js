@@ -490,8 +490,8 @@ app.post('/api/ai-chat', async (req, res) => {
     if (!message || typeof message !== 'string' || message.length > 2000)
       return res.status(400).json({ error: 'Invalid message' });
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'AI not configured — set OPENAI_API_KEY' });
 
     const contextLines = [
       context.platform  ? `The user is currently viewing the ${context.platform} section of the dashboard.` : '',
@@ -505,33 +505,28 @@ ${contextLines}
 Be concise and practical. Reference specific numbers when provided. Use light markdown (bold, bullet points, short paragraphs). Keep responses under 300 words unless more detail is explicitly requested. Do not make up data you have not been given.`;
 
     const messages = [
+      { role: 'system', content: system },
       ...(history || []).slice(-10),
       { role: 'user', content: message },
     ];
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
+        model:      'gpt-4o-mini',
         max_tokens: 1024,
-        system,
         messages,
       }),
     });
 
     const data = await response.json();
-    if (data.error) throw new Error(data.error.message || 'Anthropic error');
+    if (data.error) throw new Error(data.error.message || 'OpenAI error');
 
-    const answer = (data.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('') || '';
-
+    const answer = data.choices?.[0]?.message?.content || '';
     res.json({ answer });
   } catch (err) {
     console.error('[AI Chat]', err.message);
