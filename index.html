@@ -527,13 +527,36 @@
 
 
   <!-- AI Agent Widget -->
-  <div id="google-ads-agent"></div>
-  <script
-    src="https://ads-agent-production-cd60.up.railway.app/embed.js"
-    data-target="google-ads-agent"
-    data-width="420px"
-    data-height="640px"
-  ></script>
+  <button id="ai-agent-btn" title="Ads AI Agent" style="
+    position:fixed;bottom:24px;right:24px;z-index:9999;
+    width:52px;height:52px;border-radius:50%;
+    background:#6366f1;border:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;box-shadow:0 4px 20px rgba(99,102,241,.5);
+    transition:transform .2s,box-shadow .2s;
+  ">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  </button>
+  <script>
+    (function () {
+      var btn = document.getElementById('ai-agent-btn');
+      var win = null;
+      btn.onmouseenter = function () { btn.style.transform = 'scale(1.1)'; };
+      btn.onmouseleave = function () { btn.style.transform = ''; };
+      btn.addEventListener('click', function () {
+        if (win && !win.closed) { win.focus(); return; }
+        var w = 480, h = 700;
+        var left = window.screenX + window.outerWidth - w - 40;
+        var top  = Math.max(0, window.screenY + window.outerHeight - h - 60);
+        win = window.open(
+          'https://ads-agent-production-cd60.up.railway.app',
+          'ads-ai-agent',
+          'width='+w+',height='+h+',left='+left+',top='+top+
+          ',resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
+        );
+      });
+    })();
+  </script>
 
 </body>
 </html>
