@@ -493,24 +493,45 @@ app.post('/api/ai-chat', async (req, res) => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(503).json({ error: 'AI not configured — set OPENAI_API_KEY' });
 
-    const parts = [];
-    if (context.platform)  parts.push(`Section: ${context.platform}`);
-    if (context.dateRange) parts.push(`Date range: ${context.dateRange}`);
-    if (context.kpis && context.kpis.length) {
-      parts.push(`\n## KPI Summary\n${context.kpis.join('\n')}`);
-    }
+    const sections = [];
+    if (context.platform)  sections.push(`Current section: ${context.platform}`);
+    if (context.dateRange) sections.push(`Date range: ${context.dateRange}`);
+
+    if (context.kpis && context.kpis.length)
+      sections.push(`\n### On-screen KPIs\n${context.kpis.join('\n')}`);
+
     if (context.tableData && context.tableData.length) {
-      const label = context.tableTitle ? `## ${context.tableTitle}` : '## Campaign / Data Table';
-      parts.push(`\n${label}\n${JSON.stringify(context.tableData, null, 2)}`);
+      const label = context.tableTitle || 'Campaign / Data Table';
+      sections.push(`\n### ${label}\n${JSON.stringify(context.tableData, null, 2)}`);
     }
 
-    const dataBlock = parts.length
-      ? `\n\nHere is the live dashboard data the user is currently viewing:\n${parts.join('\n')}`
+    if (context.facebookTotals)
+      sections.push(`\n### Facebook Ads Totals\n${JSON.stringify(context.facebookTotals, null, 2)}`);
+    if (context.facebookCampaigns && context.facebookCampaigns.length)
+      sections.push(`\n### Facebook Campaigns (all loaded)\n${JSON.stringify(context.facebookCampaigns, null, 2)}`);
+
+    if (context.googleAdsTotals)
+      sections.push(`\n### Google Ads Totals\n${JSON.stringify(context.googleAdsTotals, null, 2)}`);
+    if (context.googleAdsCampaigns && context.googleAdsCampaigns.length)
+      sections.push(`\n### Google Ads Campaigns (all loaded)\n${JSON.stringify(context.googleAdsCampaigns, null, 2)}`);
+
+    if (context.googleAnalyticsTotals)
+      sections.push(`\n### Google Analytics Totals\n${JSON.stringify(context.googleAnalyticsTotals, null, 2)}`);
+    if (context.gaChannels && Object.keys(context.gaChannels).length)
+      sections.push(`\n### GA4 Traffic by Channel\n${JSON.stringify(context.gaChannels, null, 2)}`);
+
+    if (context.barkTotals)
+      sections.push(`\n### Bark Totals\n${JSON.stringify(context.barkTotals, null, 2)}`);
+    if (context.mvfTotals)
+      sections.push(`\n### MVF Totals\n${JSON.stringify(context.mvfTotals, null, 2)}`);
+
+    const dataBlock = sections.length
+      ? `\n\n---\n## Live Dashboard Data\n${sections.join('\n')}`
       : '';
 
     const system = `You are an AI analytics assistant embedded in the NXG Marketing Analytics Portal.
-You help marketing teams understand performance across Google Ads, Facebook Ads, and Google Analytics 4.
-Always base your answers on the dashboard data provided below. Cite specific numbers. Do not invent data you have not been given.
+You help marketing teams understand performance across Google Ads, Facebook Ads, Google Analytics 4, Bark, and MVF.
+Always base your answers on the dashboard data provided below. Cite specific numbers from the data. Do not invent data not present.
 Use light markdown (bold, bullet points, short paragraphs). Be concise — under 300 words unless more detail is asked for.${dataBlock}`;
 
     const messages = [

@@ -2895,3 +2895,117 @@ if (_savedSession) {
   catch { sessionStorage.removeItem(SESSION_KEY); }
 }
 // else: login screen stays visible, update() called after successful login
+
+/* ── AI Context Snapshot ─────────────────────────────────── */
+window.__getAIContext = function () {
+  var ctx = { platform: platform };
+
+  // Date range
+  var df = document.getElementById('date-from');
+  var dt = document.getElementById('date-to');
+  if (df && dt && df.value && dt.value) ctx.dateRange = df.value + ' to ' + dt.value;
+
+  // KPI cards (what's currently on screen)
+  var kpis = [];
+  document.querySelectorAll('#kpi-grid .kpi-card').forEach(function (c) {
+    var label  = c.querySelector('.kpi-label');
+    var value  = c.querySelector('.kpi-value');
+    var change = c.querySelector('.kpi-change');
+    if (label && value) {
+      var entry = label.textContent.trim() + ': ' + value.textContent.trim();
+      if (change) entry += ' (' + change.textContent.trim() + ')';
+      kpis.push(entry);
+    }
+  });
+  if (kpis.length) ctx.kpis = kpis;
+
+  // Table data (what's currently rendered in the campaign table)
+  var thead = document.getElementById('table-head');
+  var tbody = document.getElementById('table-body');
+  if (thead && tbody) {
+    var headers = Array.from(thead.querySelectorAll('th')).map(function (th) { return th.textContent.trim(); });
+    var rows = Array.from(tbody.querySelectorAll('tr')).slice(0, 50).map(function (tr) {
+      var cells = Array.from(tr.querySelectorAll('td')).map(function (td) { return td.textContent.trim(); });
+      if (!cells.length) return null;
+      if (headers.length === cells.length) {
+        var obj = {};
+        headers.forEach(function (h, i) { if (h) obj[h] = cells[i]; });
+        return obj;
+      }
+      return cells;
+    }).filter(Boolean);
+    var titleEl = document.getElementById('table-title');
+    if (titleEl) ctx.tableTitle = titleEl.textContent.trim();
+    if (rows.length) ctx.tableData = rows;
+  }
+
+  // Raw platform data (always available regardless of current view)
+  function fmtNum(n) { return Math.round((n || 0) * 100) / 100; }
+
+  if (fbApiCampaigns.length > 0) {
+    ctx.facebookCampaigns = fbApiCampaigns.slice(0, 30).map(function (c) {
+      return {
+        name: c.name, status: c.status,
+        spend: fmtNum(c.spend), impressions: c.impressions, clicks: c.clicks,
+        conversions: fmtNum(c.conversions), cpc: fmtNum(c.cpc), ctr: fmtNum(c.ctr),
+        cpa: fmtNum(c.cpa), revenue: fmtNum(c.revenue || 0)
+      };
+    });
+    if (fbApiDaily.length > 0) {
+      ctx.facebookTotals = {
+        spend:       fmtNum(sum(fbApiDaily, 'fb_spend')),
+        impressions: Math.round(sum(fbApiDaily, 'fb_impressions')),
+        clicks:      Math.round(sum(fbApiDaily, 'fb_clicks')),
+        conversions: fmtNum(sum(fbApiDaily, 'fb_conversions')),
+        reach:       Math.round(sum(fbApiDaily, 'fb_reach'))
+      };
+    }
+  }
+
+  if (gadsApiCampaigns.length > 0) {
+    ctx.googleAdsCampaigns = gadsApiCampaigns.slice(0, 30).map(function (c) {
+      return {
+        name: c.name, status: c.status,
+        spend: fmtNum(c.spend), impressions: c.impressions, clicks: c.clicks,
+        conversions: fmtNum(c.conv), revenue: fmtNum(c.revenue || 0)
+      };
+    });
+    if (gadsApiDaily.length > 0) {
+      ctx.googleAdsTotals = {
+        spend:       fmtNum(sum(gadsApiDaily, 'gads_spend')),
+        impressions: Math.round(sum(gadsApiDaily, 'gads_impressions')),
+        clicks:      Math.round(sum(gadsApiDaily, 'gads_clicks')),
+        conversions: fmtNum(sum(gadsApiDaily, 'gads_conversions'))
+      };
+    }
+  }
+
+  if (gaApiDaily.length > 0) {
+    ctx.googleAnalyticsTotals = {
+      sessions:  Math.round(sum(gaApiDaily, 'ga_sessions')),
+      users:     Math.round(sum(gaApiDaily, 'ga_users')),
+      pageviews: Math.round(sum(gaApiDaily, 'ga_pageviews')),
+      goals:     fmtNum(sum(gaApiDaily, 'ga_goals'))
+    };
+  }
+  if (Object.keys(gaApiChannels).length > 0) ctx.gaChannels = gaApiChannels;
+
+  if (barkData.length > 0) {
+    ctx.barkTotals = {
+      rows:    barkData.length,
+      spend:   fmtNum(sum(barkData, 'spend')),
+      leads:   Math.round(sum(barkData, 'leads') || 0),
+      revenue: fmtNum(sum(barkData, 'revenue') || 0)
+    };
+  }
+  if (mvfData.length > 0) {
+    ctx.mvfTotals = {
+      rows:    mvfData.length,
+      spend:   fmtNum(sum(mvfData, 'spend')),
+      leads:   Math.round(sum(mvfData, 'leads') || 0),
+      revenue: fmtNum(sum(mvfData, 'revenue') || 0)
+    };
+  }
+
+  return ctx;
+};
