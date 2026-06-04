@@ -6,6 +6,7 @@
   <title>NXG &mdash; Analytics Portal</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/otpauth@9.3.5/dist/otpauth.umd.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
   <script src="config.js" defer></script>
@@ -365,9 +366,29 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <iframe id="ai-panel-frame" title="AI Analytics Assistant" loading="lazy"
-        src="https://ads-agent-production-cd60.up.railway.app/widget"
-        class="ai-panel-frame"></iframe>
+
+      <div class="ai-messages" id="ai-messages">
+        <div class="ai-msg ai-msg--assistant">
+          <div class="ai-msg-avatar">AI</div>
+          <div class="ai-msg-bubble">
+            Hi! I can help you analyze your marketing data. Ask me about campaign performance, budget efficiency, traffic trends, or any metrics you see on the dashboard.
+          </div>
+        </div>
+      </div>
+
+      <div class="ai-prompts" id="ai-prompts">
+        <button class="ai-prompt-chip" data-prompt="Give me a summary of the current dashboard performance.">Summarize performance</button>
+        <button class="ai-prompt-chip" data-prompt="Which campaigns or channels are wasting budget?">Budget waste</button>
+        <button class="ai-prompt-chip" data-prompt="What are the top performing campaigns right now?">Top campaigns</button>
+        <button class="ai-prompt-chip" data-prompt="What actions should I take to improve results?">Recommendations</button>
+      </div>
+
+      <form class="ai-composer" id="ai-composer" autocomplete="off">
+        <input type="text" id="ai-input" class="ai-input" placeholder="Ask about your data…" autocomplete="off">
+        <button type="submit" class="ai-send-btn" id="ai-send-btn" title="Send">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </form>
     </aside>
 
   </div>
@@ -549,26 +570,137 @@
 
   <script>
     (function () {
-      var panel = document.getElementById('ai-panel');
+      /* ── Panel toggle ── */
+      var panel     = document.getElementById('ai-panel');
       var toggleBtn = document.getElementById('ai-toggle-btn');
-      var closeBtn = document.getElementById('ai-panel-close');
+      var closeBtn  = document.getElementById('ai-panel-close');
 
-      function setOpen(open) {
-        if (open) {
-          panel.classList.remove('collapsed');
-          toggleBtn.classList.add('active');
-        } else {
-          panel.classList.add('collapsed');
-          toggleBtn.classList.remove('active');
+      function setPanelOpen(open) {
+        if (open) { panel.classList.remove('collapsed'); toggleBtn.classList.add('active'); }
+        else       { panel.classList.add('collapsed');   toggleBtn.classList.remove('active'); }
+      }
+
+      toggleBtn.addEventListener('click', function () { setPanelOpen(panel.classList.contains('collapsed')); });
+      closeBtn.addEventListener('click',  function () { setPanelOpen(false); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !panel.classList.contains('collapsed')) setPanelOpen(false);
+      });
+
+      /* ── Chat ── */
+      var messagesEl = document.getElementById('ai-messages');
+      var promptsEl  = document.getElementById('ai-prompts');
+      var composer   = document.getElementById('ai-composer');
+      var inputEl    = document.getElementById('ai-input');
+      var sendBtn    = document.getElementById('ai-send-btn');
+      var history    = [];
+      var busy       = false;
+
+      function getDashboardContext() {
+        var ctx = {};
+        var activeNav = document.querySelector('.nav-item.active');
+        if (activeNav) ctx.platform = activeNav.textContent.trim();
+        var dateFrom = document.getElementById('date-from');
+        var dateTo   = document.getElementById('date-to');
+        if (dateFrom && dateTo && dateFrom.value && dateTo.value)
+          ctx.dateRange = dateFrom.value + ' to ' + dateTo.value;
+        var kpiCards = document.querySelectorAll('.kpi-card, [class*="kpi"]');
+        if (kpiCards.length) {
+          var kpis = [];
+          kpiCards.forEach(function (c) {
+            var label = c.querySelector('p, .kpi-label, span:first-child');
+            var value = c.querySelector('h2, strong, .kpi-value');
+            if (label && value) kpis.push(label.textContent.trim() + ': ' + value.textContent.trim());
+          });
+          if (kpis.length) ctx.kpis = kpis.join(', ');
+        }
+        return ctx;
+      }
+
+      function renderMarkdown(text) {
+        if (typeof marked !== 'undefined') {
+          return marked.parse(text, { breaks: true, gfm: true });
+        }
+        return text.replace(/\n/g, '<br>');
+      }
+
+      function appendMessage(role, html, isHtml) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'ai-msg ai-msg--' + role;
+        if (role === 'assistant') {
+          var avatar = document.createElement('div');
+          avatar.className = 'ai-msg-avatar';
+          avatar.textContent = 'AI';
+          wrapper.appendChild(avatar);
+        }
+        var bubble = document.createElement('div');
+        bubble.className = 'ai-msg-bubble' + (role === 'assistant' ? ' ai-msg-bubble--md' : '');
+        if (isHtml) bubble.innerHTML = html;
+        else        bubble.textContent = html;
+        wrapper.appendChild(bubble);
+        messagesEl.appendChild(wrapper);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return bubble;
+      }
+
+      function showTyping() {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'ai-msg ai-msg--assistant ai-msg--typing';
+        wrapper.id = 'ai-typing';
+        var avatar = document.createElement('div');
+        avatar.className = 'ai-msg-avatar';
+        avatar.textContent = 'AI';
+        var bubble = document.createElement('div');
+        bubble.className = 'ai-msg-bubble';
+        bubble.innerHTML = '<span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(bubble);
+        messagesEl.appendChild(wrapper);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function hideTyping() {
+        var el = document.getElementById('ai-typing');
+        if (el) el.remove();
+      }
+
+      async function sendMessage(text) {
+        text = (text || inputEl.value).trim();
+        if (!text || busy) return;
+        busy = true;
+        inputEl.value = '';
+        sendBtn.disabled = true;
+        promptsEl.style.display = 'none';
+
+        appendMessage('user', text, false);
+        history.push({ role: 'user', content: text });
+        showTyping();
+
+        try {
+          var res = await fetch('/api/ai-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, history: history.slice(-10), context: getDashboardContext() })
+          });
+          var data = await res.json();
+          hideTyping();
+          if (!res.ok) throw new Error(data.error || 'Request failed');
+          var answer = data.answer || '';
+          appendMessage('assistant', renderMarkdown(answer), true);
+          history.push({ role: 'assistant', content: answer });
+        } catch (err) {
+          hideTyping();
+          appendMessage('assistant', 'Sorry, something went wrong: ' + err.message, false);
+        } finally {
+          busy = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
         }
       }
 
-      toggleBtn.addEventListener('click', function () {
-        setOpen(panel.classList.contains('collapsed'));
-      });
-      closeBtn.addEventListener('click', function () { setOpen(false); });
-      document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && !panel.classList.contains('collapsed')) setOpen(false);
+      composer.addEventListener('submit', function (e) { e.preventDefault(); sendMessage(); });
+
+      document.querySelectorAll('.ai-prompt-chip').forEach(function (btn) {
+        btn.addEventListener('click', function () { sendMessage(this.dataset.prompt); });
       });
     })();
   </script>

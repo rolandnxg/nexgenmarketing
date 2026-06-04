@@ -483,6 +483,62 @@ app.get('/config.js', (req, res) => {
 
 app.use(express.static(__dirname));
 
+/* ── AI Chat ─────────────────────────────────────────────── */
+app.post('/api/ai-chat', async (req, res) => {
+  try {
+    const { message, history = [], context = {} } = req.body;
+    if (!message || typeof message !== 'string' || message.length > 2000)
+      return res.status(400).json({ error: 'Invalid message' });
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'AI not configured — set ANTHROPIC_API_KEY' });
+
+    const contextLines = [
+      context.platform  ? `The user is currently viewing the ${context.platform} section of the dashboard.` : '',
+      context.dateRange ? `Selected date range: ${context.dateRange}.` : '',
+      context.kpis      ? `Visible KPI metrics: ${context.kpis}.` : '',
+    ].filter(Boolean).join('\n');
+
+    const system = `You are an AI analytics assistant embedded in the NXG Marketing Analytics Portal.
+You help marketing teams understand performance across Google Ads, Facebook Ads, and Google Analytics 4.
+${contextLines}
+Be concise and practical. Reference specific numbers when provided. Use light markdown (bold, bullet points, short paragraphs). Keep responses under 300 words unless more detail is explicitly requested. Do not make up data you have not been given.`;
+
+    const messages = [
+      ...(history || []).slice(-10),
+      { role: 'user', content: message },
+    ];
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+      },
+      body: JSON.stringify({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 1024,
+        system,
+        messages,
+      }),
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || 'Anthropic error');
+
+    const answer = (data.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('') || '';
+
+    res.json({ answer });
+  } catch (err) {
+    console.error('[AI Chat]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`NXG Analytics running at http://localhost:${PORT}`);
   console.log(`Accounts: ${CUSTOMER_IDS.join(', ')}`);
