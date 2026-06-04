@@ -493,16 +493,25 @@ app.post('/api/ai-chat', async (req, res) => {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(503).json({ error: 'AI not configured — set OPENAI_API_KEY' });
 
-    const contextLines = [
-      context.platform  ? `The user is currently viewing the ${context.platform} section of the dashboard.` : '',
-      context.dateRange ? `Selected date range: ${context.dateRange}.` : '',
-      context.kpis      ? `Visible KPI metrics: ${context.kpis}.` : '',
-    ].filter(Boolean).join('\n');
+    const parts = [];
+    if (context.platform)  parts.push(`Section: ${context.platform}`);
+    if (context.dateRange) parts.push(`Date range: ${context.dateRange}`);
+    if (context.kpis && context.kpis.length) {
+      parts.push(`\n## KPI Summary\n${context.kpis.join('\n')}`);
+    }
+    if (context.tableData && context.tableData.length) {
+      const label = context.tableTitle ? `## ${context.tableTitle}` : '## Campaign / Data Table';
+      parts.push(`\n${label}\n${JSON.stringify(context.tableData, null, 2)}`);
+    }
+
+    const dataBlock = parts.length
+      ? `\n\nHere is the live dashboard data the user is currently viewing:\n${parts.join('\n')}`
+      : '';
 
     const system = `You are an AI analytics assistant embedded in the NXG Marketing Analytics Portal.
 You help marketing teams understand performance across Google Ads, Facebook Ads, and Google Analytics 4.
-${contextLines}
-Be concise and practical. Reference specific numbers when provided. Use light markdown (bold, bullet points, short paragraphs). Keep responses under 300 words unless more detail is explicitly requested. Do not make up data you have not been given.`;
+Always base your answers on the dashboard data provided below. Cite specific numbers. Do not invent data you have not been given.
+Use light markdown (bold, bullet points, short paragraphs). Be concise — under 300 words unless more detail is asked for.${dataBlock}`;
 
     const messages = [
       { role: 'system', content: system },

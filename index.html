@@ -597,22 +597,49 @@
 
       function getDashboardContext() {
         var ctx = {};
+        // Active section
         var activeNav = document.querySelector('.nav-item.active');
         if (activeNav) ctx.platform = activeNav.textContent.trim();
+
+        // Date range
         var dateFrom = document.getElementById('date-from');
         var dateTo   = document.getElementById('date-to');
         if (dateFrom && dateTo && dateFrom.value && dateTo.value)
           ctx.dateRange = dateFrom.value + ' to ' + dateTo.value;
-        var kpiCards = document.querySelectorAll('.kpi-card, [class*="kpi"]');
-        if (kpiCards.length) {
-          var kpis = [];
-          kpiCards.forEach(function (c) {
-            var label = c.querySelector('p, .kpi-label, span:first-child');
-            var value = c.querySelector('h2, strong, .kpi-value');
-            if (label && value) kpis.push(label.textContent.trim() + ': ' + value.textContent.trim());
-          });
-          if (kpis.length) ctx.kpis = kpis.join(', ');
+
+        // KPI cards — reads the real rendered values
+        var kpis = [];
+        document.querySelectorAll('#kpi-grid .kpi-card').forEach(function (c) {
+          var label  = c.querySelector('.kpi-label');
+          var value  = c.querySelector('.kpi-value');
+          var change = c.querySelector('.kpi-change');
+          if (label && value) {
+            var entry = label.textContent.trim() + ': ' + value.textContent.trim();
+            if (change) entry += ' (' + change.textContent.trim() + ')';
+            kpis.push(entry);
+          }
+        });
+        if (kpis.length) ctx.kpis = kpis;
+
+        // Campaign / data table — reads all rendered rows
+        var thead = document.getElementById('table-head');
+        var tbody = document.getElementById('table-body');
+        if (thead && tbody) {
+          var headers = Array.from(thead.querySelectorAll('th')).map(function (th) { return th.textContent.trim(); });
+          var rows = Array.from(tbody.querySelectorAll('tr')).slice(0, 30).map(function (tr) {
+            var cells = Array.from(tr.querySelectorAll('td')).map(function (td) { return td.textContent.trim(); });
+            if (!cells.length) return null;
+            if (headers.length === cells.length) {
+              var obj = {};
+              headers.forEach(function (h, i) { if (h) obj[h] = cells[i]; });
+              return obj;
+            }
+            return cells;
+          }).filter(Boolean);
+          if (rows.length) ctx.tableTitle = (document.getElementById('table-title') || {}).textContent || '';
+          if (rows.length) ctx.tableData  = rows;
         }
+
         return ctx;
       }
 
