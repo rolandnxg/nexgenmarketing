@@ -2291,3 +2291,13 @@ tbody tr:hover td { background: var(--surface-2); }
   margin-bottom: 6px;
   object-fit: cover;
 }
+
+/* user bubble markdown overrides (white on accent background) */
+.ai-msg--user .ai-msg-bubble--md p    { color: #fff; }
+.ai-msg--user .ai-msg-bubble--md li   { color: #fff; }
+.ai-msg--user .ai-msg-bubble--md strong { color: #fff; font-weight: 700; }
+.ai-msg--user .ai-msg-bubble--md code  { background: rgba(0,0,0,.2); color: #fff; }
+.ai-msg--user .ai-msg-bubble--md h1,
+.ai-msg--user .ai-msg-bubble--md h2,
+.ai-msg--user .ai-msg-bubble--md h3   { color: #fff; }
+.ai-msg--user .ai-msg-bubble--md a    { color: rgba(255,255,255,.8); }

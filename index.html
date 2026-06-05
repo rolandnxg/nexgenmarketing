@@ -670,7 +670,7 @@
           wrapper.appendChild(avatar);
         }
         var bubble = document.createElement('div');
-        bubble.className = 'ai-msg-bubble' + (role === 'assistant' ? ' ai-msg-bubble--md' : '');
+        bubble.className = 'ai-msg-bubble ai-msg-bubble--md';
         if (isHtml) bubble.innerHTML = html;
         else        bubble.textContent = html;
         wrapper.appendChild(bubble);
@@ -710,12 +710,12 @@
         promptsEl.style.display = 'none';
 
         // Show user message (with image thumbnail if attached)
-        var userHtml = text ? document.createTextNode(text).textContent : '';
+        var renderedText = renderMarkdown(text);
         if (pendingImage) {
           var thumb = '<img src="data:' + pendingImage.mimeType + ';base64,' + pendingImage.base64 + '" class="ai-msg-img-thumb" alt="attachment">';
-          appendMessage('user', thumb + (text ? '<p>' + userHtml + '</p>' : ''), true);
+          appendMessage('user', thumb + (text ? renderedText : ''), true);
         } else {
-          appendMessage('user', text, false);
+          appendMessage('user', renderedText, true);
         }
 
         var imagePayload = pendingImage ? { base64: pendingImage.base64, mimeType: pendingImage.mimeType } : null;
