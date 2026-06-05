@@ -2214,7 +2214,13 @@ tbody tr:hover td { background: var(--surface-2); }
   padding: 9px 12px;
   outline: none;
   transition: border-color .15s;
+  resize: none;
+  line-height: 1.5;
+  overflow-y: auto;
+  min-height: 38px;
+  max-height: 140px;
 }
+.ai-composer { align-items: flex-end; }
 .ai-input:focus { border-color: var(--accent); }
 .ai-input::placeholder { color: var(--text-muted); }
 
