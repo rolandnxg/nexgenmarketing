@@ -486,7 +486,7 @@ app.use(express.static(__dirname));
 /* ── AI Chat ─────────────────────────────────────────────── */
 app.post('/api/ai-chat', async (req, res) => {
   try {
-    const { message, history = [], context = {} } = req.body;
+    const { message, image, history = [], context = {} } = req.body;
     if (!message || typeof message !== 'string' || message.length > 2000)
       return res.status(400).json({ error: 'Invalid message' });
 
@@ -534,10 +534,21 @@ You help marketing teams understand performance across Google Ads, Facebook Ads,
 Always base your answers on the dashboard data provided below. Cite specific numbers from the data. Do not invent data not present.
 Use light markdown (bold, bullet points, short paragraphs). Be concise — under 300 words unless more detail is asked for.${dataBlock}`;
 
+    // Build the user content — text only, or text + image for vision
+    let userContent;
+    if (image && image.base64 && image.mimeType) {
+      userContent = [
+        { type: 'text', text: message },
+        { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.base64}`, detail: 'high' } },
+      ];
+    } else {
+      userContent = message;
+    }
+
     const messages = [
       { role: 'system', content: system },
       ...(history || []).slice(-10),
-      { role: 'user', content: message },
+      { role: 'user', content: userContent },
     ];
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

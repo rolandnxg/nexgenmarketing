@@ -383,8 +383,17 @@
         <button class="ai-prompt-chip" data-prompt="What actions should I take to improve results?">Recommendations</button>
       </div>
 
+      <div class="ai-image-preview" id="ai-image-preview" style="display:none">
+        <img id="ai-preview-img" src="" alt="Attachment preview">
+        <button class="ai-image-remove" id="ai-image-remove" title="Remove image">&times;</button>
+      </div>
+
       <form class="ai-composer" id="ai-composer" autocomplete="off">
-        <input type="text" id="ai-input" class="ai-input" placeholder="Ask about your data…" autocomplete="off">
+        <label class="ai-attach-btn" title="Attach image (or paste from clipboard)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <input type="file" id="ai-file-input" accept="image/*" style="display:none">
+        </label>
+        <input type="text" id="ai-input" class="ai-input" placeholder="Ask about your data… or paste a screenshot" autocomplete="off">
         <button type="submit" class="ai-send-btn" id="ai-send-btn" title="Send">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
@@ -587,13 +596,53 @@
       });
 
       /* ── Chat ── */
-      var messagesEl = document.getElementById('ai-messages');
-      var promptsEl  = document.getElementById('ai-prompts');
-      var composer   = document.getElementById('ai-composer');
-      var inputEl    = document.getElementById('ai-input');
-      var sendBtn    = document.getElementById('ai-send-btn');
-      var history    = [];
-      var busy       = false;
+      var messagesEl   = document.getElementById('ai-messages');
+      var promptsEl    = document.getElementById('ai-prompts');
+      var composer     = document.getElementById('ai-composer');
+      var inputEl      = document.getElementById('ai-input');
+      var sendBtn      = document.getElementById('ai-send-btn');
+      var fileInput    = document.getElementById('ai-file-input');
+      var previewWrap  = document.getElementById('ai-image-preview');
+      var previewImg   = document.getElementById('ai-preview-img');
+      var removeImgBtn = document.getElementById('ai-image-remove');
+      var history      = [];
+      var busy         = false;
+      var pendingImage = null; // { base64, mimeType }
+
+      function setImage(file) {
+        if (!file || !file.type.startsWith('image/')) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var dataUrl = e.target.result;
+          var comma   = dataUrl.indexOf(',');
+          pendingImage = { base64: dataUrl.slice(comma + 1), mimeType: file.type };
+          previewImg.src = dataUrl;
+          previewWrap.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function clearImage() {
+        pendingImage = null;
+        previewImg.src = '';
+        previewWrap.style.display = 'none';
+        fileInput.value = '';
+      }
+
+      fileInput.addEventListener('change', function () { setImage(fileInput.files[0]); });
+      removeImgBtn.addEventListener('click', clearImage);
+
+      // Clipboard paste — anywhere in the panel
+      panel.addEventListener('paste', function (e) {
+        var items = (e.clipboardData || e.originalEvent && e.originalEvent.clipboardData || {}).items || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith('image/')) {
+            setImage(items[i].getAsFile());
+            e.preventDefault();
+            break;
+          }
+        }
+      });
 
       function getDashboardContext() {
         if (typeof window.__getAIContext === 'function') return window.__getAIContext();
@@ -653,21 +702,31 @@
 
       async function sendMessage(text) {
         text = (text || inputEl.value).trim();
-        if (!text || busy) return;
+        if ((!text && !pendingImage) || busy) return;
         busy = true;
         inputEl.value = '';
         sendBtn.disabled = true;
         promptsEl.style.display = 'none';
 
-        appendMessage('user', text, false);
-        history.push({ role: 'user', content: text });
+        // Show user message (with image thumbnail if attached)
+        var userHtml = text ? document.createTextNode(text).textContent : '';
+        if (pendingImage) {
+          var thumb = '<img src="data:' + pendingImage.mimeType + ';base64,' + pendingImage.base64 + '" class="ai-msg-img-thumb" alt="attachment">';
+          appendMessage('user', thumb + (text ? '<p>' + userHtml + '</p>' : ''), true);
+        } else {
+          appendMessage('user', text, false);
+        }
+
+        var imagePayload = pendingImage ? { base64: pendingImage.base64, mimeType: pendingImage.mimeType } : null;
+        history.push({ role: 'user', content: text || '(image attached)' });
+        clearImage();
         showTyping();
 
         try {
           var res = await fetch('/api/ai-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, history: history.slice(-10), context: getDashboardContext() })
+            body: JSON.stringify({ message: text || 'Please analyze this image.', image: imagePayload, history: history.slice(-10), context: getDashboardContext() })
           });
           var data = await res.json();
           hideTyping();
