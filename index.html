@@ -377,6 +377,7 @@
       </div>
 
       <div class="ai-prompts" id="ai-prompts">
+        <button class="ai-prompt-chip ai-agent-sync-chip" id="ai-agent-sync" type="button">Agent report</button>
         <button class="ai-prompt-chip" data-prompt="Give me a summary of the current dashboard performance.">Summarize performance</button>
         <button class="ai-prompt-chip" data-prompt="Which campaigns or channels are wasting budget?">Budget waste</button>
         <button class="ai-prompt-chip" data-prompt="What are the top performing campaigns right now?">Top campaigns</button>
@@ -745,6 +746,37 @@
         }
       }
 
+      async function syncAgentReport() {
+        if (busy) return;
+        busy = true;
+        sendBtn.disabled = true;
+        promptsEl.style.display = 'none';
+        appendMessage('user', 'Show latest agent report', false);
+        showTyping();
+
+        try {
+          var res = await fetch('/api/agent-report');
+          var data = await res.json();
+          hideTyping();
+          if (!res.ok) throw new Error(data.error || 'Agent report unavailable');
+
+          var updated = data.updatedAt ? new Date(data.updatedAt).toLocaleString() : 'unknown time';
+          var header = '**Agent report**';
+          if (data.name) header += ' `' + data.name + '`';
+          header += '\n\n_Last updated: ' + updated + '_\n\n';
+
+          appendMessage('assistant', renderMarkdown(header + (data.markdown || '_Report is empty._')), true);
+          history.push({ role: 'assistant', content: data.markdown || '' });
+        } catch (err) {
+          hideTyping();
+          appendMessage('assistant', 'Agent report is not available: ' + err.message, false);
+        } finally {
+          busy = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+        }
+      }
+
       composer.addEventListener('submit', function (e) { e.preventDefault(); sendMessage(); });
 
       // Enter sends, Shift+Enter inserts newline; auto-resize textarea
@@ -760,8 +792,11 @@
       });
 
       document.querySelectorAll('.ai-prompt-chip').forEach(function (btn) {
+        if (btn.id === 'ai-agent-sync') return;
         btn.addEventListener('click', function () { sendMessage(this.dataset.prompt); });
       });
+      var agentSyncBtn = document.getElementById('ai-agent-sync');
+      if (agentSyncBtn) agentSyncBtn.addEventListener('click', syncAgentReport);
     })();
   </script>
 

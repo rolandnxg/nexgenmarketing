@@ -1,0 +1,9 @@
+# Skill allow-list for the CMO Strategist (strategy + context-engineering only).
+# Each maps to crew-service/skills/<name>/SKILL.md, loaded as a knowledge source.
+skills:
+  - marketing-plan
+  - marketing-ideas
+  - multi-agent-patterns
+  - context-compression
+  - context-optimization
+  - context-degradation

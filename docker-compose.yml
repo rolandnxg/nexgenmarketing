@@ -1,0 +1,46 @@
+services:
+  marketiq:
+    build: .
+    container_name: marketiq
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - crew-service
+    environment:
+      - PORT=3000
+      - AGENT_MARKDOWN_DIR=/app/agent-sync
+      - AGENT_MARKDOWN_PATH=${AGENT_MARKDOWN_PATH:-}
+      # AI chat is served by the CrewAI sidecar; OpenAI in .env stays as fallback.
+      - CREW_SERVICE_URL=http://crew-service:8000
+    # The app reads its config from .env (via dotenv) and also rewrites
+    # .env at runtime (e.g. saving the Google OAuth refresh token), so .env
+    # is bind-mounted as a file rather than injected as static env vars.
+    volumes:
+      - ./.env:/app/.env
+      - ./data:/app/data
+      - type: bind
+        source: ${AGENT_MARKDOWN_HOST_DIR:-./data/agent-sync}
+        target: /app/agent-sync
+        read_only: true
+
+  # CrewAI multi-agent service backing the dashboard AI chat panel.
+  crew-service:
+    build: ./crew-service
+    container_name: marketiq-crew
+    restart: unless-stopped
+    # Inject the dashboard .env (OPENAI_API_KEY etc.) into the container env.
+    env_file:
+      - ./.env
+    environment:
+      - PORT=8000
+      # The crew calls back into the Node app for live Google Ads / GA4 data.
+      - DASHBOARD_API_URL=http://marketiq:3000
+      # Pin the crew to GPT-4.1 (the agreed model). Hardcoded so it overrides any
+      # OPENAI_MODEL in .env (which env_file would otherwise inject).
+      - OPENAI_MODEL=gpt-4.1
+      # Disable CrewAI's interactive trace prompt + telemetry — in a headless
+      # container the prompt blocks ~20s per run waiting for stdin.
+      - CREWAI_TRACING_ENABLED=false
+      - CREWAI_DISABLE_TELEMETRY=true
+      - OTEL_SDK_DISABLED=true

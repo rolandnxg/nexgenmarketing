@@ -14,6 +14,10 @@ app.use((req, res, next) => { console.log(req.method, req.path); next(); });
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+const AGENT_MARKDOWN_PATH = process.env.AGENT_MARKDOWN_PATH || '';
+const AGENT_MARKDOWN_DIR = process.env.AGENT_MARKDOWN_DIR || '/app/agent-sync';
+const AGENT_MARKDOWN_MAX_BYTES = 512 * 1024;
+
 const ALLOWED = ['bark', 'mvf'];
 
 function readData(platform) {
@@ -22,6 +26,41 @@ function readData(platform) {
 }
 function writeData(platform, data) {
   fs.writeFileSync(path.join(DATA_DIR, `${platform}.json`), JSON.stringify(data));
+}
+
+function readAgentMarkdown() {
+  let resolvedPath = AGENT_MARKDOWN_PATH ? path.resolve(AGENT_MARKDOWN_PATH) : '';
+
+  if (!resolvedPath) {
+    const resolvedDir = path.resolve(AGENT_MARKDOWN_DIR);
+    const files = fs.readdirSync(resolvedDir)
+      .filter(name => name.toLowerCase().endsWith('.md'))
+      .map(name => {
+        const filePath = path.join(resolvedDir, name);
+        const stat = fs.statSync(filePath);
+        return stat.isFile() ? { filePath, mtimeMs: stat.mtimeMs } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    if (!files.length) {
+      const err = new Error('No markdown reports found in agent sync folder');
+      err.code = 'ENOENT';
+      throw err;
+    }
+    resolvedPath = files[0].filePath;
+  }
+
+  const stat = fs.statSync(resolvedPath);
+  if (!stat.isFile()) throw new Error('Configured agent markdown path is not a file');
+  if (stat.size > AGENT_MARKDOWN_MAX_BYTES) throw new Error('Agent markdown file is too large');
+
+  return {
+    path: resolvedPath,
+    name: path.basename(resolvedPath),
+    updatedAt: stat.mtime.toISOString(),
+    markdown: fs.readFileSync(resolvedPath, 'utf8'),
+  };
 }
 
 app.get('/api/data/:platform', (req, res) => {
@@ -48,6 +87,20 @@ app.delete('/api/data/:platform', (req, res) => {
   if (!ALLOWED.includes(platform)) return res.status(400).json({ error: 'Invalid platform' });
   writeData(platform, []);
   res.json({ ok: true });
+});
+
+app.get('/api/agent-report', (req, res) => {
+  try {
+    const report = readAgentMarkdown();
+    if (!report) return res.status(404).json({ error: 'Agent markdown path is not configured' });
+    res.json(report);
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Agent markdown file not found' });
+    }
+    console.error('[Agent Report]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const CUSTOMER_IDS  = (process.env.GADS_CUSTOMER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -490,8 +543,39 @@ app.post('/api/ai-chat', async (req, res) => {
     if (!message || typeof message !== 'string' || message.length > 2000)
       return res.status(400).json({ error: 'Invalid message' });
 
+    // ── Primary path: CrewAI sidecar (hierarchical multi-agent crew) ──────────
+    // Forward the raw structured context; the Python service formats it. Include
+    // the on-disk external agent report so the crew sees it too.
+    const crewUrl = process.env.CREW_SERVICE_URL;
+    if (crewUrl) {
+      try {
+        let externalAgentReport = '';
+        try {
+          const ar = readAgentMarkdown();
+          if (ar && ar.markdown.trim())
+            externalAgentReport = `(${ar.name}, updated ${ar.updatedAt})\n${ar.markdown}`;
+        } catch (err) {
+          if (err.code !== 'ENOENT') console.warn('[Agent Report]', err.message);
+        }
+        const fwdContext = externalAgentReport ? { ...context, externalAgentReport } : context;
+        const cr = await fetch(`${crewUrl.replace(/\/$/, '')}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, image, history: (history || []).slice(-10), context: fwdContext }),
+        });
+        if (!cr.ok) throw new Error(`crew-service HTTP ${cr.status}`);
+        const cdata = await cr.json();
+        if (cdata.error) throw new Error(cdata.error);
+        return res.json({ answer: cdata.answer || '' });
+      } catch (err) {
+        console.warn('[AI Chat] crew-service unavailable, falling back to OpenAI:', err.message);
+        // fall through to the direct OpenAI path below
+      }
+    }
+
+    // ── Fallback path: direct OpenAI call (original single-shot behaviour) ─────
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'AI not configured — set OPENAI_API_KEY' });
+    if (!apiKey) return res.status(503).json({ error: 'AI not configured — set CREW_SERVICE_URL or OPENAI_API_KEY' });
 
     const sections = [];
     if (context.platform)  sections.push(`Current section: ${context.platform}`);
@@ -524,6 +608,15 @@ app.post('/api/ai-chat', async (req, res) => {
       sections.push(`\n### Bark Totals\n${JSON.stringify(context.barkTotals, null, 2)}`);
     if (context.mvfTotals)
       sections.push(`\n### MVF Totals\n${JSON.stringify(context.mvfTotals, null, 2)}`);
+
+    try {
+      const agentReport = readAgentMarkdown();
+      if (agentReport && agentReport.markdown.trim()) {
+        sections.push(`\n### External Agent Report (${agentReport.name}, updated ${agentReport.updatedAt})\n${agentReport.markdown}`);
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') console.warn('[Agent Report]', err.message);
+    }
 
     const dataBlock = sections.length
       ? `\n\n---\n## Live Dashboard Data\n${sections.join('\n')}`
