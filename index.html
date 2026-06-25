@@ -166,6 +166,10 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             AI Analyst
           </button>
+          <button id="utm-lookup-btn" class="import-csv-btn" style="display:none">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            UTM Lookup
+          </button>
           <button id="nka-toggle-btn" class="import-csv-btn" style="display:none">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             Negative Keywords
@@ -262,6 +266,58 @@
               <div class="nka-footer-actions">
                 <button id="nka-reset-btn" class="nka-btn-secondary">Analyze New Data</button>
                 <button id="nka-copy-all-btn" class="nka-btn-primary">Copy All Negatives</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UTM Lookup Panel (FB tab) -->
+        <div id="utm-panel" style="display:none">
+          <div class="analysis-card">
+            <div class="analysis-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <h3>UTM Lookup</h3>
+              <span class="analysis-sub">Paste lead landing page URLs to identify Campaign, Ad Set &amp; Ad Name</span>
+            </div>
+
+            <div id="utm-input-area">
+              <div class="nka-upload-row">
+                <div id="utm-dropzone" class="nka-dropzone">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <p>Drop a CSV or TXT file here or <label for="utm-file" class="nka-file-label">browse</label></p>
+                  <p class="nka-hint">One URL per line, or a CSV with a <strong>url</strong> column</p>
+                  <input type="file" id="utm-file" accept=".csv,.txt" style="display:none">
+                </div>
+                <div class="nka-or">or paste URLs</div>
+                <textarea id="utm-paste" class="nka-textarea" placeholder="Paste one URL per line, e.g.:&#10;https://example.com/?utm_source=fb&utm_campaign=Summer+Sale&utm_content=Leads+AU&utm_term=Ad+Creative+1&#10;https://example.com/?utm_source=fb&utm_campaign=Retargeting&utm_content=Warm+Audience"></textarea>
+              </div>
+              <div class="nka-actions">
+                <button id="utm-clear-btn" class="nka-btn-secondary">Clear</button>
+                <button id="utm-analyze-btn" class="nka-btn-primary">Parse UTMs</button>
+              </div>
+            </div>
+
+            <div id="utm-results" style="display:none">
+              <div id="utm-summary" class="nka-summary"></div>
+              <div class="table-wrap" style="margin-top:16px">
+                <table id="utm-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Campaign Name</th>
+                      <th>Ad Set Name</th>
+                      <th>Ad Name</th>
+                      <th>Source</th>
+                      <th>Medium</th>
+                      <th>URL</th>
+                    </tr>
+                  </thead>
+                  <tbody id="utm-table-body"></tbody>
+                </table>
+              </div>
+              <div class="nka-footer-actions">
+                <button id="utm-reset-btn" class="nka-btn-secondary">Parse New URLs</button>
+                <button id="utm-export-btn" class="nka-btn-primary">Export CSV</button>
               </div>
             </div>
           </div>

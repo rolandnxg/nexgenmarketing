@@ -1328,6 +1328,8 @@ function renderHeader() {
   document.getElementById('create-edm-btn').style.display  = platform === 'email' ? '' : 'none';
   document.getElementById('import-csv-btn').style.display = (platform === 'bark' || platform === 'mvf' || platform === 'leads') ? '' : 'none';
   document.getElementById('nka-toggle-btn').style.display  = 'none';
+  document.getElementById('utm-lookup-btn').style.display  = platform === 'fb' ? '' : 'none';
+  if (platform !== 'fb' && typeof window.hideUTMPanel === 'function') window.hideUTMPanel();
   const importBtn = document.getElementById('bark-import-btn');
   if (importBtn) importBtn.style.display = (platform === 'bark' && barkData.length > 0) ? '' : 'none';
   const mvfImportBtn = document.getElementById('mvf-import-btn');
@@ -2005,6 +2007,205 @@ google ads certification exam,2,8.00,0,30`;
 
 })();
 
+/* ── UTM Lookup (FB tab) ────────────────────────────────── */
+(function () {
+  let utmRows = [];
+
+  const isNumericId = v => /^\d{10,}$/.test(v.trim());
+
+  function parseUTMs(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const results = [];
+    let rowNum = 0;
+
+    lines.forEach(line => {
+      let rawUrl = line;
+      if (!rawUrl.startsWith('http')) {
+        const parts = line.split(',');
+        const urlCell = parts.find(p => p.trim().startsWith('http'));
+        if (urlCell) rawUrl = urlCell.trim().replace(/^"|"$/g, '');
+        else return;
+      }
+
+      let url;
+      try { url = new URL(rawUrl); } catch { return; }
+
+      rowNum++;
+      const p = url.searchParams;
+      results.push({
+        num:        rowNum,
+        campaignRaw: p.get('utm_campaign') || '',
+        adsetRaw:    p.get('utm_content')  || '',
+        adRaw:       p.get('utm_term') || p.get('utm_ad') || '',
+        source:      p.get('utm_source')   || '',
+        medium:      p.get('utm_medium')   || '',
+        url:         rawUrl,
+        campaign:    '',
+        adset:       '',
+        ad:          '',
+      });
+    });
+
+    return results;
+  }
+
+  /* Batch-resolve FB IDs → names using the Graph API ids= parameter */
+  async function resolveIds(rows) {
+    const token = FB_CONFIG.accessToken;
+    if (!token) return;
+
+    // Collect unique numeric IDs across all three fields
+    const idSet = new Set();
+    rows.forEach(r => {
+      if (isNumericId(r.campaignRaw)) idSet.add(r.campaignRaw.trim());
+      if (isNumericId(r.adsetRaw))    idSet.add(r.adsetRaw.trim());
+      if (isNumericId(r.adRaw))       idSet.add(r.adRaw.trim());
+    });
+
+    if (idSet.size === 0) {
+      // No IDs to resolve — values are already names
+      rows.forEach(r => {
+        r.campaign = r.campaignRaw;
+        r.adset    = r.adsetRaw;
+        r.ad       = r.adRaw;
+      });
+      return;
+    }
+
+    // FB Graph API allows up to 50 IDs per request
+    const idArr    = [...idSet];
+    const nameMap  = {};
+    const CHUNK    = 50;
+
+    for (let i = 0; i < idArr.length; i += CHUNK) {
+      const chunk  = idArr.slice(i, i + CHUNK).join(',');
+      const url    = `${FB_BASE}/?ids=${chunk}&fields=name&access_token=${token}`;
+      try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (data.error) { console.warn('[UTM resolve]', data.error.message); continue; }
+        Object.entries(data).forEach(([id, obj]) => {
+          if (obj && obj.name) nameMap[id] = obj.name;
+        });
+      } catch (e) { console.warn('[UTM resolve fetch]', e.message); }
+    }
+
+    rows.forEach(r => {
+      r.campaign = isNumericId(r.campaignRaw) ? (nameMap[r.campaignRaw.trim()] || r.campaignRaw) : r.campaignRaw;
+      r.adset    = isNumericId(r.adsetRaw)    ? (nameMap[r.adsetRaw.trim()]    || r.adsetRaw)    : r.adsetRaw;
+      r.ad       = isNumericId(r.adRaw)       ? (nameMap[r.adRaw.trim()]       || r.adRaw)       : r.adRaw;
+    });
+  }
+
+  function renderUTMResults(rows) {
+    utmRows = rows;
+    const mismatched = rows.filter(r => !r.campaign && !r.adset && !r.ad).length;
+
+    document.getElementById('utm-summary').innerHTML = `
+      <div class="nka-stat"><div class="nka-stat-value">${rows.length}</div><div class="nka-stat-label">URLs Parsed</div></div>
+      <div class="nka-stat"><div class="nka-stat-value ${rows.filter(r=>r.campaign).length>0?'green':'amber'}">${rows.filter(r=>r.campaign).length}</div><div class="nka-stat-label">Have Campaign</div></div>
+      <div class="nka-stat"><div class="nka-stat-value ${rows.filter(r=>r.adset).length>0?'green':'amber'}">${rows.filter(r=>r.adset).length}</div><div class="nka-stat-label">Have Ad Set</div></div>
+      <div class="nka-stat"><div class="nka-stat-value ${mismatched===0?'green':'amber'}">${mismatched}</div><div class="nka-stat-label">No UTMs Found</div></div>
+    `;
+
+    const cell = (name, rawId) => {
+      if (!name) return '<span style="color:var(--text-faint)">—</span>';
+      const showId = isNumericId(rawId) && name !== rawId ? `` : '';
+      return `<span>${name}</span>${showId}`;
+    };
+
+    document.getElementById('utm-table-body').innerHTML = rows.map(r => `
+      <tr>
+        <td style="color:var(--text-faint)">${r.num}</td>
+        <td>${cell(r.campaign, r.campaignRaw)}</td>
+        <td>${cell(r.adset,    r.adsetRaw)}</td>
+        <td>${cell(r.ad,       r.adRaw)}</td>
+        <td>${r.source || '<span style="color:var(--text-faint)">—</span>'}</td>
+        <td>${r.medium || '<span style="color:var(--text-faint)">—</span>'}</td>
+        <td><span style="font-size:11px;color:var(--text-faint);word-break:break-all">${r.url.length > 60 ? r.url.slice(0, 60) + '…' : r.url}</span></td>
+      </tr>`).join('');
+
+    document.getElementById('utm-input-area').style.display = 'none';
+    document.getElementById('utm-results').style.display    = '';
+  }
+
+  // File drop
+  const dropzone  = document.getElementById('utm-dropzone');
+  const fileInput = document.getElementById('utm-file');
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault(); dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) { const r = new FileReader(); r.onload = ev => { document.getElementById('utm-paste').value = ev.target.result; }; r.readAsText(file); }
+  });
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) { const r = new FileReader(); r.onload = ev => { document.getElementById('utm-paste').value = ev.target.result; }; r.readAsText(file); }
+  });
+
+  // Parse + resolve
+  document.getElementById('utm-analyze-btn').addEventListener('click', async () => {
+    const text = document.getElementById('utm-paste').value.trim();
+    if (!text) { alert('Please paste URLs or upload a file first.'); return; }
+    const rows = parseUTMs(text);
+    if (rows.length === 0) { alert('No valid URLs found. Make sure each line starts with http.'); return; }
+
+    const btn = document.getElementById('utm-analyze-btn');
+    btn.textContent = 'Resolving IDs…';
+    btn.disabled = true;
+    try {
+      await resolveIds(rows);
+    } finally {
+      btn.textContent = 'Parse UTMs';
+      btn.disabled = false;
+    }
+    renderUTMResults(rows);
+  });
+
+  // Clear
+  document.getElementById('utm-clear-btn').addEventListener('click', () => {
+    document.getElementById('utm-paste').value = '';
+    document.getElementById('utm-file').value  = '';
+  });
+
+  // Reset
+  document.getElementById('utm-reset-btn').addEventListener('click', () => {
+    utmRows = [];
+    document.getElementById('utm-paste').value = '';
+    document.getElementById('utm-file').value  = '';
+    document.getElementById('utm-input-area').style.display = '';
+    document.getElementById('utm-results').style.display    = 'none';
+  });
+
+  // Export CSV
+  document.getElementById('utm-export-btn').addEventListener('click', () => {
+    const headers = ['#', 'Campaign Name', 'Ad Set Name', 'Ad Name', 'Source', 'Medium', 'URL'];
+    const lines   = [headers, ...utmRows.map(r => [r.num, r.campaign, r.adset, r.ad, r.source, r.medium, r.url])];
+    const csv     = lines.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv,' + encodeURIComponent(csv);
+    a.download = 'utm-lookup.csv';
+    a.click();
+  });
+
+  window.toggleUTMPanel = function () {
+    const panel = document.getElementById('utm-panel');
+    const isVisible = panel.style.display !== 'none';
+    panel.style.display = isVisible ? 'none' : '';
+    const btn = document.getElementById('utm-lookup-btn');
+    btn.style.background = isVisible ? '' : 'var(--accent)';
+    btn.style.color      = isVisible ? '' : '#fff';
+  };
+
+  window.hideUTMPanel = function () {
+    document.getElementById('utm-panel').style.display = 'none';
+    const btn = document.getElementById('utm-lookup-btn');
+    if (btn) { btn.style.background = ''; btn.style.color = ''; }
+  };
+})();
+
 /* ── Event listeners ────────────────────────────────────── */
 document.querySelectorAll('.nav-item').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2360,6 +2561,9 @@ document.getElementById('upload-modal-close').addEventListener('click', closeUpl
 document.getElementById('upload-backdrop').addEventListener('click', closeUploadModal);
 document.getElementById('import-csv-btn').addEventListener('click', () => {
   openUploadModal(platform);
+});
+document.getElementById('utm-lookup-btn').addEventListener('click', () => {
+  if (typeof window.toggleUTMPanel === 'function') window.toggleUTMPanel();
 });
 document.getElementById('error-close').addEventListener('click', hideError);
 
